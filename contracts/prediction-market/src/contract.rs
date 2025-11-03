@@ -73,6 +73,7 @@ pub struct Round {
 pub enum DataKey {
     Token,
     IntervalSeconds,
+    BufferSeconds,
     MinBetAmount,
     TreasuryFee,
     TreasuryAmount,
@@ -100,6 +101,11 @@ fn emit_round_started_event(
         .publish(topics, (start_timestamp, lock_timestamp, close_timestamp));
 }
 
+fn emit_round_locked_event(e: &Env, epoch: u128, lock_timestamp: u64, lock_price: i128) {
+    let topics = (Symbol::new(e, "ROUND_LOCKED"), epoch);
+    e.events().publish(topics, (lock_timestamp, lock_price));
+}
+
 /////////////////////// CONSTANTS //////////////////////////////////
 
 // Maximum treasury fee: 10%
@@ -123,6 +129,7 @@ impl PredictionMarket {
         e: &Env,
         owner: Address,
         intervals_seconds: u64,
+        buffer_seconds: u64,
         min_bet_amount: i128,
         token_address: Address,
         treasury_fee: u32,
@@ -140,6 +147,11 @@ impl PredictionMarket {
         e.storage()
             .instance()
             .set(&DataKey::IntervalSeconds, &intervals_seconds);
+
+        // Initialize Buffer Seconds
+        e.storage()
+            .instance()
+            .set(&DataKey::BufferSeconds, &buffer_seconds);
 
         // Initialize Minimum Bet Amount
         e.storage()
@@ -211,8 +223,57 @@ impl PredictionMarket {
             .set(&DataKey::IsGenesisStarted, &true);
     }
 
+    /// Function to lock the genesis round
+    /// Only callable by the owner
+    #[only_owner]
+    pub fn genesis_lock_round(e: &Env) {
+        let is_genesis_locked: bool = e
+            .storage()
+            .instance()
+            .get(&DataKey::IsGenesisLocked)
+            .expect("IS_GENESIS_LOCKED_NOT_FOUND");
+
+        assert!(!is_genesis_locked, "GENESIS_ALREADY_LOCKED");
+
+        let is_genesis_started: bool = e
+            .storage()
+            .instance()
+            .get(&DataKey::IsGenesisStarted)
+            .expect("IS_GENESIS_STARTED_NOT_FOUND");
+
+        assert!(is_genesis_started, "GENESIS_NOT_STARTED");
+
+        let current_epoch: u128 = e
+            .storage()
+            .instance()
+            .get(&DataKey::CurrentEpoch)
+            .expect("CURRENT_EPOCH_NOT_FOUND");
+
+        // Get Token Price from Oracle
+        let current_price = Self::get_token_price(e);
+
+        // Safely Lock the Round
+        Self::safe_lock_round(e, current_epoch, current_price);
+
+        // Advance Current Epoch by 1
+        let new_epoch = current_epoch + 1;
+
+        e.storage()
+            .instance()
+            .set(&DataKey::CurrentEpoch, &new_epoch);
+
+        // Start New Round
+        Self::start_round(e, new_epoch);
+
+        // Set Genesis Locked Flag to true
+        e.storage().instance().set(&DataKey::IsGenesisLocked, &true);
+    }
+
     //////////////////////////////// INTERNALS ////////////////////////////////
 
+    /// Internal function to start a new round
+    /// # Parameters
+    /// - `epoch`: The epoch of the round to be started
     fn start_round(e: &Env, epoch: u128) {
         let start_timestamp = e.ledger().timestamp();
 
@@ -249,6 +310,63 @@ impl PredictionMarket {
 
         // Emit an Event for Round Started
         emit_round_started_event(e, epoch, start_timestamp, lock_timestamp, close_timestamp);
+    }
+
+    /// Internal function to safely lock a round
+    /// # Parameters
+    /// - `epoch`: The epoch of the round to be locked
+    /// - `current_price`: The current price fetched from the oracle
+    fn safe_lock_round(e: &Env, epoch: u128, current_price: i128) {
+        let mut round: Round = e
+            .storage()
+            .instance()
+            .get(&DataKey::Rounds(epoch))
+            .expect("ROUND_NOT_FOUND");
+
+        // CHECK: Round should have started
+        assert!(round.start_timestamp != 0, "CANNOT_LOCK_NON_STARTED_ROUND");
+
+        let current_timestamp: u64 = e.ledger().timestamp();
+
+        // CHECK: Current time should be after or equal to lock timestamp
+        assert!(
+            current_timestamp >= round.lock_timestamp,
+            "CANNOT_LOCK_BEFORE_LOCK_TIMESTAMP"
+        );
+
+        let buffer_seconds: u64 = e
+            .storage()
+            .instance()
+            .get(&DataKey::BufferSeconds)
+            .expect("BUFFER_SECONDS_NOT_FOUND");
+
+        // CHECK: Current time should be within buffer seconds of lock timestamp
+        assert!(
+            current_timestamp <= round.lock_timestamp + buffer_seconds,
+            "CANNOT_LOCK_OUTSIDE_BUFFER"
+        );
+
+        let interval_seconds: u64 = e
+            .storage()
+            .instance()
+            .get(&DataKey::IntervalSeconds)
+            .expect("INTERVAL_SECONDS_NOT_FOUND");
+
+        // Update Round Details on Lock
+        round.lock_price = current_price;
+        round.close_timestamp = current_timestamp + interval_seconds;
+
+        // Store Updated Round in Storage
+        e.storage().instance().set(&DataKey::Rounds(epoch), &round);
+
+        // Emit an Event for Round Locked
+        emit_round_locked_event(e, epoch, current_timestamp, current_price);
+    }
+
+    fn get_token_price(_e: &Env) -> i128 {
+        // Here you would typically fetch the price from an oracle.
+        // For simplicity, we'll set a dummy price.
+        1000 // Dummy price
     }
 }
 
