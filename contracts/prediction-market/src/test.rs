@@ -1,5 +1,6 @@
 #![cfg(test)]
 
+use mock_token::contract::MyToken;
 use soroban_sdk::{testutils::Address as _, Address, Env};
 
 use crate::contract::{reflector_oracle, PredictionMarket, PredictionMarketClient};
@@ -11,13 +12,21 @@ const DEFAULT_BUFFER_SECONDS: u64 = 60; // 1 minute
 const DEFAULT_MIN_BET_AMOUNT: i128 = 10000000; // 0.1 XLM
 const DEFAULT_TREASURY_FEE: u32 = 500; // 5%
 
-fn init_test<'a>(env: &Env) -> (Address, Address, Address, PredictionMarketClient<'a>, Address) {
+fn init_test<'a>(
+    env: &Env,
+) -> (
+    Address,
+    Address,
+    Address,
+    PredictionMarketClient<'a>,
+    Address,
+) {
     let admin = Address::generate(env);
     env.mock_all_auths();
 
     let oracle_id = env.register(reflector_oracle::WASM, ());
 
-    let token_id = Address::from_str(env, DEFAULT_TOKEN_ID);
+    let token_id = deploy_xlm_token(env, &admin);
 
     let contract_id = env.register(
         PredictionMarket,
@@ -37,6 +46,12 @@ fn init_test<'a>(env: &Env) -> (Address, Address, Address, PredictionMarketClien
     (admin, oracle_id, token_id, client, contract_id)
 }
 
+fn deploy_xlm_token(env: &Env, admin: &Address) -> Address {
+    env.mock_all_auths();
+    let contract_id = env.register(MyToken, (admin, 100000000000000000000000000i128));
+    contract_id
+}
+
 #[test]
 fn test_constructor() {
     let env = Env::default();
@@ -50,6 +65,3 @@ fn test_constructor() {
     assert_eq!(client.get_token_address(), token_id);
     assert_eq!(client.get_oracle_address(), oracle_id);
 }
-
-
-
