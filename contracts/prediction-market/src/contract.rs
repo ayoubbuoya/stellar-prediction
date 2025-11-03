@@ -280,6 +280,8 @@ impl PredictionMarket {
     /// - `epoch`: The epoch of the round to bet on
     /// - `user`: The address of the user placing the bet
     /// - `amount`: The amount of tokens to bet
+    /// # Events
+    /// - `BET_PLACED`: Emitted when a bet is placed
     pub fn bet_bull(e: &Env, epoch: u128, user: Address, amount: i128) {
         // User should authorize the bet
         user.require_auth();
@@ -371,6 +373,109 @@ impl PredictionMarket {
         emit_bet_placed_event(e, epoch, user, amount, Position::Bull);
     }
 
+    /// Function to place a bet on the bear side
+    /// # Parameters
+    /// - `epoch`: The epoch of the round to bet on
+    /// - `user`: The address of the user placing the bet
+    /// - `amount`: The amount of tokens to bet
+    /// # Events
+    /// - `BET_PLACED`: Emitted when a bet is placed
+    pub fn bet_bear(e: &Env, epoch: u128, user: Address, amount: i128) {
+        // User should authorize the bet
+        user.require_auth();
+
+        let current_epoch: u128 = e
+            .storage()
+            .instance()
+            .get(&DataKey::CurrentEpoch)
+            .expect("CURRENT_EPOCH_NOT_FOUND");
+
+        // CHECK: Epoch should be the current epoch
+        assert!(epoch == current_epoch, "INVALID_ROUND");
+
+        // CHECK: Round should be bettable
+        assert!(Self::is_bettable(e, epoch), "ROUND_NOT_BETTABLE");
+
+        // CHECK: Amount should be greater than minimum bet amount
+        let min_bet_amount: i128 = e
+            .storage()
+            .instance()
+            .get(&DataKey::MinBetAmount)
+            .expect("MIN_BET_AMOUNT_NOT_FOUND");
+
+        assert!(amount >= min_bet_amount, "BET_AMOUNT_TOO_LOW");
+
+        // CHECK: User should not have already placed a bet in this round
+        assert!(Self::has_bet(e, epoch, &user), "ALREADY_BET_FOR_ROUND");
+
+        // Get Token Address
+        let token_address: Address = e
+            .storage()
+            .instance()
+            .get(&DataKey::Token)
+            .expect("TOKEN_ADDRESS_NOT_FOUND");
+
+        // Create Token Client
+        let token_client = token::Client::new(e, &token_address);
+
+        // Safely transfer tokens from user to contract
+        Self::safe_transfer_from_tokens(
+            e,
+            &token_client,
+            &user,
+            &e.current_contract_address(),
+            amount,
+        );
+
+        // Update Round Info
+        let mut round: Round = e
+            .storage()
+            .instance()
+            .get(&DataKey::Rounds(epoch))
+            .expect("ROUND_NOT_FOUND");
+
+        round.total_amount += amount;
+        round.bear_amount += amount;
+
+        // Store Updated Round in Storage
+        e.storage().instance().set(&DataKey::Rounds(epoch), &round);
+
+        // Record Bet Info
+        let bet_info = BetInfo {
+            position: Position::Bear,
+            amount,
+            claimed: false,
+        };
+
+        // Store Bet Info in Storage
+        let bet_info_key = DataKey::BetInfos(epoch, user.clone());
+
+        e.storage().instance().set(&bet_info_key, &bet_info);
+
+        // Get User Rounds (returns an empty vec if none exist)
+        let mut user_rounds: Vec<u128> = e
+            .storage()
+            .instance()
+            .get(&DataKey::UserRounds(user.clone()))
+            .unwrap_or(Vec::new(&e));
+
+        // Add Round to User Rounds
+        user_rounds.push_back(epoch);
+
+        // Store Updated User Rounds in Storage
+        e.storage()
+            .instance()
+            .set(&DataKey::UserRounds(user.clone()), &user_rounds);
+
+        // Emit an Event for Bet Placed
+        emit_bet_placed_event(e, epoch, user, amount, Position::Bear);
+    }
+
+    /// Readonly function to check if a round is bettable
+    /// # Parameters
+    /// - `epoch`: The epoch of the round to check
+    /// # Returns
+    /// - `bool`: True if the round is bettable, false otherwise
     pub fn is_bettable(e: &Env, epoch: u128) -> bool {
         let round: Round = e
             .storage()
