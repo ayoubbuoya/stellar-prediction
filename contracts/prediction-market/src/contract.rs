@@ -128,10 +128,9 @@ fn emit_rewards_calculated_event(e: &Env, epoch: u128, reward_amount: i128, trea
 
 // Maximum treasury fee: 10%
 const MAX_TREASURY_FEE: u32 = 1000; // 10%
-const TOKEN_ID: &str = "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC";
 
 // Import Rflector Oracle contarct using its wasm file
-mod reflector_oracle {
+pub mod reflector_oracle {
     soroban_sdk::contractimport!(file = "./src/reflector-oracle.wasm");
 }
 
@@ -215,27 +214,6 @@ impl PredictionMarket {
         e.storage()
             .instance()
             .set(&DataKey::IsGenesisLocked, &false);
-    }
-
-    /// Internal function to get XLM price from the oracle
-    /// # Parameters
-    /// - `oracle_address`: Address of the oracle contract
-    /// # Returns
-    /// - `i128`: XLM price in stroops
-    pub fn get_xlm_oracle_price(e: &Env) -> i128 {
-        let oracle_address: Address = e
-            .storage()
-            .instance()
-            .get(&DataKey::OracleAddress)
-            .expect("ORACLE_ADDRESS_NOT_FOUND");
-
-        let oracle_client = reflector_oracle::Client::new(e, &oracle_address);
-
-        let xlm_asset = Asset::Other(Symbol::new(&e, "XLM"));
-
-        let recent_price = oracle_client.lastprice(&xlm_asset);
-
-        recent_price.expect("INVALID_ORACLE_PRICE").price
     }
 
     /// Function to start the genesis round
@@ -561,6 +539,25 @@ impl PredictionMarket {
 
     //////////////////////////////// GETTERS ////////////////////////////////
 
+    /// Internal function to get XLM price from the oracle
+    /// # Returns
+    /// - `i128`: XLM price in stroops
+    pub fn get_xlm_oracle_price(e: &Env) -> i128 {
+        let oracle_address: Address = e
+            .storage()
+            .instance()
+            .get(&DataKey::OracleAddress)
+            .expect("ORACLE_ADDRESS_NOT_FOUND");
+
+        let oracle_client = reflector_oracle::Client::new(e, &oracle_address);
+
+        let xlm_asset = Asset::Other(Symbol::new(&e, "XLM"));
+
+        let recent_price = oracle_client.lastprice(&xlm_asset);
+
+        recent_price.expect("INVALID_ORACLE_PRICE").price
+    }
+
     pub fn get_is_genesis_started(e: &Env) -> bool {
         e.storage()
             .instance()
@@ -631,6 +628,30 @@ impl PredictionMarket {
             .get(&DataKey::UserRounds(user))
             .unwrap_or(Vec::new(&e))
     }
+
+
+    pub fn get_oracle_address(e: &Env) -> Address {
+        e.storage()
+            .instance()
+            .get(&DataKey::OracleAddress)
+            .expect("ORACLE_ADDRESS_NOT_FOUND")
+    }
+
+    pub fn get_interval_seconds(e: &Env) -> u64 {
+        e.storage()
+            .instance()
+            .get(&DataKey::IntervalSeconds)
+            .expect("INTERVAL_SECONDS_NOT_FOUND")
+    }
+
+    pub fn get_buffer_seconds(e: &Env) -> u64 {
+        e.storage()
+            .instance()
+            .get(&DataKey::BufferSeconds)
+            .expect("BUFFER_SECONDS_NOT_FOUND")
+    }
+
+
 
     /// Readonly function to check if a round is bettable
     /// # Parameters
@@ -886,10 +907,8 @@ impl PredictionMarket {
     }
 
     /// Internal function to get the token price from an oracle
-    fn get_token_price(_e: &Env) -> i128 {
-        // Here you would typically fetch the price from an oracle.
-        // For simplicity, we'll set a dummy price.
-        1000 // Dummy price
+    fn get_token_price(e: &Env) -> i128 {
+        Self::get_xlm_oracle_price(e)
     }
 
     /// Internal function to check if a user has already placed a bet in a round
