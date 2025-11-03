@@ -111,6 +111,16 @@ fn emit_bet_placed_event(e: &Env, epoch: u128, user: Address, amount: i128, posi
     e.events().publish(topics, (amount, position));
 }
 
+fn emit_round_ended_event(e: &Env, epoch: u128, close_timestamp: u64, close_price: i128) {
+    let topics = (Symbol::new(e, "ROUND_ENDED"), epoch);
+    e.events().publish(topics, (close_timestamp, close_price));
+}
+
+fn emit_rewards_calculated_event(e: &Env, epoch: u128, reward_amount: i128, treasury_amt: i128) {
+    let topics = (Symbol::new(e, "REWARDS_CALCULATED"), epoch);
+    e.events().publish(topics, (reward_amount, treasury_amt));
+}
+
 /////////////////////// CONSTANTS //////////////////////////////////
 
 // Maximum treasury fee: 10%
@@ -273,6 +283,51 @@ impl PredictionMarket {
 
         // Set Genesis Locked Flag to true
         e.storage().instance().set(&DataKey::IsGenesisLocked, &true);
+    }
+
+    #[only_owner]
+    pub fn execute_round(e: &Env) {
+        let is_genesis_locked: bool = e
+            .storage()
+            .instance()
+            .get(&DataKey::IsGenesisLocked)
+            .expect("IS_GENESIS_LOCKED_NOT_FOUND");
+
+        let is_genesis_started: bool = e
+            .storage()
+            .instance()
+            .get(&DataKey::IsGenesisStarted)
+            .expect("IS_GENESIS_STARTED_NOT_FOUND");
+
+        assert!(
+            is_genesis_locked && is_genesis_started,
+            "GENESIS_NOT_COMPLETED"
+        );
+
+        let current_epoch: u128 = e
+            .storage()
+            .instance()
+            .get(&DataKey::CurrentEpoch)
+            .expect("CURRENT_EPOCH_NOT_FOUND");
+
+        // Get Token Price from Oracle
+        let current_price = Self::get_token_price(e);
+
+        // Safely Lock the current round
+        Self::safe_lock_round(e, current_epoch, current_price);
+        // Safely End the n - 1 round
+        Self::safe_end_round(e, current_epoch - 1, current_price);
+        // Calculate Rewards for the n - 1 round
+        Self::calculate_rewards(e, current_epoch - 1);
+
+        // Advance Current Epoch by 1
+        let new_epoch = current_epoch + 1;
+        e.storage()
+            .instance()
+            .set(&DataKey::CurrentEpoch, &new_epoch);
+
+        // Safe start New Round
+        Self::safe_start_round(e, new_epoch);
     }
 
     /// Function to place a bet on the bull side
@@ -471,6 +526,79 @@ impl PredictionMarket {
         emit_bet_placed_event(e, epoch, user, amount, Position::Bear);
     }
 
+    //////////////////////////////// GETTERS ////////////////////////////////
+
+    pub fn get_is_genesis_started(e: &Env) -> bool {
+        e.storage()
+            .instance()
+            .get(&DataKey::IsGenesisStarted)
+            .expect("IS_GENESIS_STARTED_NOT_FOUND")
+    }
+
+    pub fn get_is_genesis_locked(e: &Env) -> bool {
+        e.storage()
+            .instance()
+            .get(&DataKey::IsGenesisLocked)
+            .expect("IS_GENESIS_LOCKED_NOT_FOUND")
+    }
+
+    pub fn get_current_epoch(e: &Env) -> u128 {
+        e.storage()
+            .instance()
+            .get(&DataKey::CurrentEpoch)
+            .expect("CURRENT_EPOCH_NOT_FOUND")
+    }
+
+    pub fn get_token_address(e: &Env) -> Address {
+        e.storage()
+            .instance()
+            .get(&DataKey::Token)
+            .expect("TOKEN_ADDRESS_NOT_FOUND")
+    }
+
+    pub fn get_min_bet_amount(e: &Env) -> i128 {
+        e.storage()
+            .instance()
+            .get(&DataKey::MinBetAmount)
+            .expect("MIN_BET_AMOUNT_NOT_FOUND")
+    }
+
+    pub fn get_treasury_fee(e: &Env) -> u32 {
+        e.storage()
+            .instance()
+            .get(&DataKey::TreasuryFee)
+            .expect("TREASURY_FEE_NOT_FOUND")
+    }
+
+    pub fn get_treasury_amount(e: &Env) -> i128 {
+        e.storage()
+            .instance()
+            .get(&DataKey::TreasuryAmount)
+            .expect("TREASURY_AMOUNT_NOT_FOUND")
+    }
+
+    pub fn get_round(e: &Env, epoch: u128) -> Round {
+        e.storage()
+            .instance()
+            .get(&DataKey::Rounds(epoch))
+            .expect("ROUND_NOT_FOUND")
+    }
+
+    pub fn get_bet_info(e: &Env, epoch: u128, user: Address) -> BetInfo {
+        let bet_info_key = DataKey::BetInfos(epoch, user);
+        e.storage()
+            .instance()
+            .get(&bet_info_key)
+            .expect("BET_INFO_NOT_FOUND")
+    }
+
+    pub fn get_user_rounds(e: &Env, user: Address) -> Vec<u128> {
+        e.storage()
+            .instance()
+            .get(&DataKey::UserRounds(user))
+            .unwrap_or(Vec::new(&e))
+    }
+
     /// Readonly function to check if a round is bettable
     /// # Parameters
     /// - `epoch`: The epoch of the round to check
@@ -583,6 +711,145 @@ impl PredictionMarket {
 
         // Emit an Event for Round Locked
         emit_round_locked_event(e, epoch, current_timestamp, current_price);
+    }
+
+    /// Internal function to safely end a round
+    /// # Parameters
+    /// - `epoch`: The epoch of the round to be ended
+    /// - `current_price`: The current price fetched from the oracle
+    fn safe_end_round(e: &Env, epoch: u128, current_price: i128) {
+        let mut round: Round = e
+            .storage()
+            .instance()
+            .get(&DataKey::Rounds(epoch))
+            .expect("ROUND_NOT_FOUND");
+
+        // CHECK: Round should be locked
+        assert!(round.lock_timestamp != 0, "CANNOT_END_NON_LOCKED_ROUND");
+
+        let current_timestamp: u64 = e.ledger().timestamp();
+
+        // CHECK: Current time should be after or equal to close timestamp
+        assert!(
+            current_timestamp >= round.close_timestamp,
+            "CANNOT_END_BEFORE_CLOSE_TIMESTAMP"
+        );
+
+        let buffer_seconds: u64 = e
+            .storage()
+            .instance()
+            .get(&DataKey::BufferSeconds)
+            .expect("BUFFER_SECONDS_NOT_FOUND");
+
+        // CHECK: Current time should be within buffer seconds of close timestamp
+        assert!(
+            current_timestamp <= round.close_timestamp + buffer_seconds,
+            "CANNOT_END_OUTSIDE_BUFFER"
+        );
+
+        round.close_price = current_price;
+
+        // Store Updated Round in Storage
+        e.storage().instance().set(&DataKey::Rounds(epoch), &round);
+
+        // Emit an Event for Round Ended
+        emit_round_ended_event(e, epoch, current_timestamp, current_price);
+    }
+
+    /// Internal function to safely start a new round
+    /// # Parameters
+    /// - `epoch`: The epoch of the round to be started
+    /// # Events
+    /// - `ROUND_STARTED`: Emitted when a new round is started
+    fn safe_start_round(e: &Env, epoch: u128) {
+        let is_genesis_started: bool = e
+            .storage()
+            .instance()
+            .get(&DataKey::IsGenesisStarted)
+            .expect("IS_GENESIS_STARTED_NOT_FOUND");
+
+        assert!(is_genesis_started, "GENESIS_NOT_STARTED");
+
+        // Get n -2 round
+        let prev_prev_epoch = epoch - 2;
+
+        let prev_prev_round: Round = e
+            .storage()
+            .instance()
+            .get(&DataKey::Rounds(prev_prev_epoch))
+            .expect("ROUND_NOT_FOUND");
+
+        // CHECK: n - 2 round should be closed
+        assert!(
+            prev_prev_round.close_timestamp != 0,
+            "CANNOT_START_BEFORE_PREV_PREV_ROUND_CLOSED"
+        );
+
+        Self::start_round(e, epoch);
+    }
+
+    /// Internal function to calculate rewards for a round
+    /// # Parameters
+    /// - `epoch`: The epoch of the round to calculate rewards for
+    /// - # Events
+    /// - `REWARDS_CALCULATED`: Emitted when rewards are calculated
+    fn calculate_rewards(e: &Env, epoch: u128) {
+        let mut round: Round = e
+            .storage()
+            .instance()
+            .get(&DataKey::Rounds(epoch))
+            .expect("ROUND_NOT_FOUND");
+
+        // CHECK: Rewards should not have been calculated yet
+        assert!(
+            round.reward_amount == 0 && round.reward_base_cal_amount == 0,
+            "REWARDS_ALREADY_CALCULATED"
+        );
+
+        let treasury_fee: u32 = e
+            .storage()
+            .instance()
+            .get(&DataKey::TreasuryFee)
+            .expect("TREASURY_FEE_NOT_FOUND");
+
+        let treasury_amt: i128;
+
+        // Determine Winning Side
+        if round.close_price > round.lock_price {
+            // Bull Wins
+            round.reward_base_cal_amount = round.bull_amount;
+            treasury_amt = (round.total_amount * treasury_fee as i128) / 10_000;
+            round.reward_amount = round.total_amount - treasury_amt;
+        } else if round.close_price < round.lock_price {
+            // Bear Wins
+            round.reward_base_cal_amount = round.bear_amount;
+            treasury_amt = (round.total_amount * treasury_fee as i128) / 10_000;
+            round.reward_amount = round.total_amount - treasury_amt;
+        } else {
+            // No one wins, all bets go to treasury
+            round.reward_base_cal_amount = 0;
+            treasury_amt = round.total_amount;
+            round.reward_amount = 0;
+        }
+
+        // Store Updated Round in Storage
+        e.storage().instance().set(&DataKey::Rounds(epoch), &round);
+
+        // Update Treasury Amount in Storage
+        let mut treasury_amount: i128 = e
+            .storage()
+            .instance()
+            .get(&DataKey::TreasuryAmount)
+            .expect("TREASURY_AMOUNT_NOT_FOUND");
+
+        treasury_amount += treasury_amt;
+
+        e.storage()
+            .instance()
+            .set(&DataKey::TreasuryAmount, &treasury_amount);
+
+        // Emit an Event for Rewards Calculated
+        emit_rewards_calculated_event(e, epoch, round.reward_amount, treasury_amt);
     }
 
     /// Internal function to get the token price from an oracle
