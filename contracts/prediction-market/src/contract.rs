@@ -1,4 +1,4 @@
-use soroban_sdk::{contract, contractimpl, contracttype, Address, Env, Symbol};
+use soroban_sdk::{contract, contractimpl, contracttype, token, Address, Env, Symbol, Vec};
 use stellar_access::ownable::{set_owner, Ownable};
 use stellar_macros::{default_impl, only_owner};
 
@@ -83,7 +83,7 @@ pub enum DataKey {
     Paused,
     Initialized,
     Rounds(u128),
-    Ledger(u64, Address),
+    BetInfos(u128, Address),
     UserRounds(Address),
 }
 
@@ -106,10 +106,16 @@ fn emit_round_locked_event(e: &Env, epoch: u128, lock_timestamp: u64, lock_price
     e.events().publish(topics, (lock_timestamp, lock_price));
 }
 
+fn emit_bet_placed_event(e: &Env, epoch: u128, user: Address, amount: i128, position: Position) {
+    let topics = (Symbol::new(e, "BET_PLACED"), epoch, user.clone());
+    e.events().publish(topics, (amount, position));
+}
+
 /////////////////////// CONSTANTS //////////////////////////////////
 
 // Maximum treasury fee: 10%
 const MAX_TREASURY_FEE: u32 = 1000; // 10%
+const TOKEN_ID: &str = "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC";
 
 // TODO: Implement whenNotPaused Macro
 
@@ -269,6 +275,112 @@ impl PredictionMarket {
         e.storage().instance().set(&DataKey::IsGenesisLocked, &true);
     }
 
+    pub fn bet_bull(e: &Env, epoch: u128, user: Address, amount: i128) {
+        // User should authorize the bet
+        user.require_auth();
+
+        let current_epoch: u128 = e
+            .storage()
+            .instance()
+            .get(&DataKey::CurrentEpoch)
+            .expect("CURRENT_EPOCH_NOT_FOUND");
+
+        // CHECK: Epoch should be the current epoch
+        assert!(epoch == current_epoch, "INVALID_ROUND");
+
+        // CHECK: Round should be bettable
+        assert!(Self::is_bettable(e, epoch), "ROUND_NOT_BETTABLE");
+
+        // CHECK: Amount should be greater than minimum bet amount
+        let min_bet_amount: i128 = e
+            .storage()
+            .instance()
+            .get(&DataKey::MinBetAmount)
+            .expect("MIN_BET_AMOUNT_NOT_FOUND");
+
+        assert!(amount >= min_bet_amount, "BET_AMOUNT_TOO_LOW");
+
+        // CHECK: User should not have already placed a bet in this round
+        assert!(Self::has_bet(e, epoch, &user), "ALREADY_BET_FOR_ROUND");
+
+        // Get Token Address
+        let token_address: Address = e
+            .storage()
+            .instance()
+            .get(&DataKey::Token)
+            .expect("TOKEN_ADDRESS_NOT_FOUND");
+
+        // Create Token Client
+        let token_client = token::Client::new(e, &token_address);
+
+        // Safely transfer tokens from user to contract
+        Self::safe_transfer_from_tokens(
+            e,
+            &token_client,
+            &user,
+            &e.current_contract_address(),
+            amount,
+        );
+
+        // Update Round Info
+        let mut round: Round = e
+            .storage()
+            .instance()
+            .get(&DataKey::Rounds(epoch))
+            .expect("ROUND_NOT_FOUND");
+
+        round.total_amount += amount;
+        round.bull_amount += amount;
+
+        // Store Updated Round in Storage
+        e.storage().instance().set(&DataKey::Rounds(epoch), &round);
+
+        // Record Bet Info
+        let bet_info = BetInfo {
+            position: Position::Bull,
+            amount,
+            claimed: false,
+        };
+
+        // Store Bet Info in Storage
+        let bet_info_key = DataKey::BetInfos(epoch, user.clone());
+
+        e.storage().instance().set(&bet_info_key, &bet_info);
+
+        // Get User Rounds (returns an empty vec if none exist)
+        let mut user_rounds: Vec<u128> = e
+            .storage()
+            .instance()
+            .get(&DataKey::UserRounds(user.clone()))
+            .unwrap_or(Vec::new(&e));
+
+        // Add Round to User Rounds
+        user_rounds.push_back(epoch);
+
+        // Store Updated User Rounds in Storage
+        e.storage()
+            .instance()
+            .set(&DataKey::UserRounds(user.clone()), &user_rounds);
+
+        // Emit an Event for Bet Placed
+        emit_bet_placed_event(e, epoch, user, amount, Position::Bull);
+    }
+
+    pub fn is_bettable(e: &Env, epoch: u128) -> bool {
+        let round: Round = e
+            .storage()
+            .instance()
+            .get(&DataKey::Rounds(epoch))
+            .expect("ROUND_NOT_FOUND");
+
+        let current_timestamp: u64 = e.ledger().timestamp();
+
+        round.start_timestamp != 0
+            && round.lock_timestamp != 0
+            && current_timestamp > round.start_timestamp
+            && current_timestamp < round.lock_timestamp
+    }
+
     //////////////////////////////// INTERNALS ////////////////////////////////
 
     /// Internal function to start a new round
@@ -363,10 +475,43 @@ impl PredictionMarket {
         emit_round_locked_event(e, epoch, current_timestamp, current_price);
     }
 
+    /// Internal function to get the token price from an oracle
     fn get_token_price(_e: &Env) -> i128 {
         // Here you would typically fetch the price from an oracle.
         // For simplicity, we'll set a dummy price.
         1000 // Dummy price
+    }
+
+    /// Internal function to check if a user has already placed a bet in a round
+    /// # Parameters
+    /// - `epoch`: The epoch of the round
+    /// - `user`: The address of the user
+    fn has_bet(e: &Env, epoch: u128, user: &Address) -> bool {
+        let bet_info_key = DataKey::BetInfos(epoch, user.clone());
+        let existing_bet_info: Option<BetInfo> = e.storage().instance().get(&bet_info_key);
+
+        existing_bet_info.is_some()
+    }
+
+    /// Internal function to safely transfer tokens from a user to another address
+    fn safe_transfer_from_tokens(
+        e: &Env,
+        token_client: &token::Client,
+        from: &Address,
+        to: &Address,
+        amount: i128,
+    ) {
+        let from_balance = token_client.balance(from);
+
+        assert!(from_balance >= amount, "INSUFFICIENT_BALANCE");
+
+        let current_contract_address = e.current_contract_address();
+
+        let from_allowance = token_client.allowance(from, &current_contract_address);
+
+        assert!(from_allowance >= amount, "INSUFFICIENT_ALLOWANCE");
+
+        token_client.transfer_from(&current_contract_address, from, to, &amount);
     }
 }
 
