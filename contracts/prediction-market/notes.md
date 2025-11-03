@@ -1,0 +1,17 @@
+# Deployment Instructions
+
+```bash
+ stellar contract deploy \
+--wasm target/wasm32v1-none/release/prediction_market.wasm \
+--source-account alice \
+--network testnet \
+--alias prediction_market \
+-- \
+--owner $(stellar keys address alice) \
+--intervals_seconds 300 \
+--buffer_seconds 60 \
+--min_bet_amount 10000000 \
+--token_address CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC \
+--treasury_fee 500 \
+--oracle_address CCYOZJCOPG34LLQQ7N24YXBM7LL62R7ONMZ3G6WZAAYPB5OYKOMJRN63
+```
