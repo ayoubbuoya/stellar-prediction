@@ -2,6 +2,8 @@ use soroban_sdk::{contract, contractimpl, contracttype, token, Address, Env, Sym
 use stellar_access::ownable::{set_owner, Ownable};
 use stellar_macros::{default_impl, only_owner};
 
+use crate::contract::reflector_oracle::Asset;
+
 // Error codes
 #[contracttype]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
@@ -72,6 +74,7 @@ pub struct Round {
 #[derive(Clone)]
 pub enum DataKey {
     Token,
+    OracleAddress,
     IntervalSeconds,
     BufferSeconds,
     MinBetAmount,
@@ -127,7 +130,10 @@ fn emit_rewards_calculated_event(e: &Env, epoch: u128, reward_amount: i128, trea
 const MAX_TREASURY_FEE: u32 = 1000; // 10%
 const TOKEN_ID: &str = "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC";
 
-// TODO: Implement whenNotPaused Macro
+// Import Rflector Oracle contarct using its wasm file
+mod reflector_oracle {
+    soroban_sdk::contractimport!(file = "./src/reflector-oracle.wasm");
+}
 
 #[contract]
 pub struct PredictionMarket;
@@ -149,6 +155,7 @@ impl PredictionMarket {
         min_bet_amount: i128,
         token_address: Address,
         treasury_fee: u32,
+        oracle_address: Address,
     ) {
         // Ensure Only Owner Can Call Constructor
         owner.require_auth();
@@ -174,8 +181,13 @@ impl PredictionMarket {
             .instance()
             .set(&DataKey::MinBetAmount, &min_bet_amount);
 
-        // Initialize Token Address
+        // Initialize Token Address used for paying bets
         e.storage().instance().set(&DataKey::Token, &token_address);
+
+        // Initialize Oracle Address used for fetching XLM price
+        e.storage()
+            .instance()
+            .set(&DataKey::OracleAddress, &oracle_address);
 
         // Initialize Treasury Fee
         e.storage()
@@ -203,6 +215,27 @@ impl PredictionMarket {
         e.storage()
             .instance()
             .set(&DataKey::IsGenesisLocked, &false);
+    }
+
+    /// Internal function to get XLM price from the oracle
+    /// # Parameters
+    /// - `oracle_address`: Address of the oracle contract
+    /// # Returns
+    /// - `i128`: XLM price in stroops
+    pub fn get_xlm_oracle_price(e: &Env) -> i128 {
+        let oracle_address: Address = e
+            .storage()
+            .instance()
+            .get(&DataKey::OracleAddress)
+            .expect("ORACLE_ADDRESS_NOT_FOUND");
+
+        let oracle_client = reflector_oracle::Client::new(e, &oracle_address);
+
+        let xlm_asset = Asset::Other(Symbol::new(&e, "XLM"));
+
+        let recent_price = oracle_client.lastprice(&xlm_asset);
+
+        recent_price.expect("INVALID_ORACLE_PRICE").price
     }
 
     /// Function to start the genesis round
