@@ -275,6 +275,11 @@ impl PredictionMarket {
         e.storage().instance().set(&DataKey::IsGenesisLocked, &true);
     }
 
+    /// Function to place a bet on the bull side
+    /// # Parameters
+    /// - `epoch`: The epoch of the round to bet on
+    /// - `user`: The address of the user placing the bet
+    /// - `amount`: The amount of tokens to bet
     pub fn bet_bull(e: &Env, epoch: u128, user: Address, amount: i128) {
         // User should authorize the bet
         user.require_auth();
