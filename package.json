@@ -4,7 +4,7 @@
   "version": "0.0.1",
   "private": true,
   "scripts": {
-    "dev": "concurrently \"stellar scaffold watch --build-clients\" \"vite\"",
+    "dev": "vite",
     "start": "concurrently \"stellar scaffold watch --build-clients\" \"vite\"",
     "build": "tsc -b && vite build",
     "install:contracts": "npm install --workspace=packages && npm run build --workspace=packages",
