@@ -87,3 +87,30 @@ fn test_genesis_lock_round_before_start() {
 
     client.genesis_lock_round(); // Should panic
 }
+
+#[test]
+fn test_genesis_round_flow() {
+    let env = Env::default();
+
+    let (_, _, _, client, _) = init_test(&env);
+
+    client.genesis_start_round();
+
+    assert_eq!(client.get_is_genesis_started(), true);
+
+    assert_eq!(client.get_current_epoch(), 1);
+
+    // Advance ledger time to after lock time
+    let current_time = env.ledger().timestamp();
+
+    let lock_time = current_time + DEFAULT_INTERVAL_SECONDS;
+
+    env.ledger().set_timestamp(lock_time);
+
+    // Lock the round
+    client.genesis_lock_round();
+
+    assert_eq!(client.get_is_genesis_locked(), true);
+    assert_eq!(client.get_current_epoch(), 2);
+    assert_eq!(client.get_round(&0u128).lock_timestamp, lock_time);
+}
