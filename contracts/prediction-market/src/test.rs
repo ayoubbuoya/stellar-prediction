@@ -14,6 +14,7 @@ const DEFAULT_INTERVAL_SECONDS: u64 = 300; // 5 minutes
 const DEFAULT_BUFFER_SECONDS: u64 = 60; // 1 minute
 const DEFAULT_MIN_BET_AMOUNT: i128 = 10000000; // 0.1 XLM
 const DEFAULT_TREASURY_FEE: u32 = 500; // 5%
+const DEFAULT_FLASH_LOAN_FEE: u32 = 50; // 0.5%
 
 fn init_test<'a>(
     env: &Env,
@@ -40,6 +41,7 @@ fn init_test<'a>(
             DEFAULT_MIN_BET_AMOUNT,
             &token_id,
             DEFAULT_TREASURY_FEE,
+            DEFAULT_FLASH_LOAN_FEE,
             &oracle_id,
         ),
     );

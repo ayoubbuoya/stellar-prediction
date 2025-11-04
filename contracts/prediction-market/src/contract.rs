@@ -2,7 +2,7 @@ use soroban_sdk::{contract, contractimpl, contracttype, token, Address, Env, Sym
 use stellar_access::ownable::{set_owner, Ownable};
 use stellar_macros::{default_impl, only_owner};
 
-use crate::contract::reflector_oracle::Asset;
+use crate::{contract::reflector_oracle::Asset, flash::FlashLoanClient};
 
 // Error codes
 #[contracttype]
@@ -88,6 +88,8 @@ pub enum DataKey {
     Rounds(u128),
     BetInfos(u128, Address),
     UserRounds(Address),
+    FlashLoanFee,
+    FlashTreasuryAmount,
 }
 
 /////////////////////// EVENTS //////////////////////////////////
@@ -124,6 +126,11 @@ fn emit_rewards_calculated_event(e: &Env, epoch: u128, reward_amount: i128, trea
     e.events().publish(topics, (reward_amount, treasury_amt));
 }
 
+fn emit_flash_loan_event(e: &Env, receiver: &Address, amount: i128, fee_amount: i128) {
+    let topics = (Symbol::new(e, "FLASH_LOAN"), receiver.clone());
+    e.events().publish(topics, (amount, fee_amount));
+}
+
 /////////////////////// CONSTANTS //////////////////////////////////
 
 // Maximum treasury fee: 10%
@@ -154,6 +161,7 @@ impl PredictionMarket {
         min_bet_amount: i128,
         token_address: Address,
         treasury_fee: u32,
+        flash_loan_fee: u32,
         oracle_address: Address,
     ) {
         // Ensure Only Owner Can Call Constructor
@@ -161,6 +169,10 @@ impl PredictionMarket {
 
         // Ensure that Treasury Fee is within limits
         assert!(treasury_fee <= MAX_TREASURY_FEE, "TREASURY_FEE_TOO_HIGH");
+        assert!(
+            flash_loan_fee <= MAX_TREASURY_FEE,
+            "FLASH_LOAN_FEE_TOO_HIGH"
+        );
 
         // Set Owner
         set_owner(e, &owner);
@@ -193,6 +205,11 @@ impl PredictionMarket {
             .instance()
             .set(&DataKey::TreasuryFee, &treasury_fee);
 
+        // Initialize Flash Borrow Fee
+        e.storage()
+            .instance()
+            .set(&DataKey::FlashLoanFee, &flash_loan_fee);
+
         // Initialize Treasury Amount to 0
         e.storage().instance().set(&DataKey::TreasuryAmount, &0i128);
 
@@ -214,6 +231,11 @@ impl PredictionMarket {
         e.storage()
             .instance()
             .set(&DataKey::IsGenesisLocked, &false);
+
+        // Initialize Flash Treasury Amount to 0
+        e.storage()
+            .instance()
+            .set(&DataKey::FlashTreasuryAmount, &0i128);
     }
 
     /// Function to start the genesis round
@@ -537,6 +559,79 @@ impl PredictionMarket {
         emit_bet_placed_event(e, epoch, user, amount, Position::Bear);
     }
 
+    /// Flash loan function to borrow tokens temporarily    
+    /// # Parameters
+    /// - `amount`: The amount of tokens to borrow
+    /// - `receiver`: The address of the receiver of the tokens
+    pub fn flash_loan(e: &Env, amount: i128, receiver: Address) {
+        // Get The Flash Loan Fee
+        let flash_loan_fee: u32 = e
+            .storage()
+            .instance()
+            .get(&DataKey::FlashLoanFee)
+            .expect("FLASH_LOAN_FEE_NOT_FOUND");
+
+        // Calculate The Fee Amount
+        let fee_amount: i128 = (amount * flash_loan_fee as i128) / 10_000;
+
+        // Get Token Address
+        let token_address: Address = e
+            .storage()
+            .instance()
+            .get(&DataKey::Token)
+            .expect("TOKEN_ADDRESS_NOT_FOUND");
+
+        // Create Token Client
+        let token_client = token::Client::new(e, &token_address);
+
+        let current_contract_address = e.current_contract_address();
+
+        // Get The token balance before the flash loan
+        let balance_before: i128 = token_client.balance(&current_contract_address);
+
+        // Safely transfer tokens from contract to receiver
+        Self::safe_transfer_tokens(
+            e,
+            &token_client,
+            &current_contract_address,
+            &receiver,
+            amount,
+        );
+
+        // Receiver should implement the FlashLoanReceiver trait
+        FlashLoanClient::new(e, &receiver).execute_flash_loan(
+            &current_contract_address,
+            &token_address,
+            &amount,
+            &fee_amount,
+        );
+
+        // Get The token balance after the flash loan
+        let balance_after: i128 = token_client.balance(&current_contract_address);
+
+        // Ensure that the receiver has repaid the loan plus fee
+        assert!(
+            balance_after >= balance_before + fee_amount,
+            "FLASH_LOAN_NOT_REPAID"
+        );
+
+        // Update Flash Treasury Amount in Storage
+        let mut flash_treasury_amount: i128 = e
+            .storage()
+            .instance()
+            .get(&DataKey::FlashTreasuryAmount)
+            .expect("FLASH_TREASURY_AMOUNT_NOT_FOUND");
+
+        flash_treasury_amount += fee_amount;
+
+        e.storage()
+            .instance()
+            .set(&DataKey::FlashTreasuryAmount, &flash_treasury_amount);
+
+        // Emit an Event for Flash Loan
+        emit_flash_loan_event(e, &receiver, amount, fee_amount);
+    }
+
     //////////////////////////////// GETTERS ////////////////////////////////
 
     /// Internal function to get XLM price from the oracle
@@ -629,7 +724,6 @@ impl PredictionMarket {
             .unwrap_or(Vec::new(&e))
     }
 
-
     pub fn get_oracle_address(e: &Env) -> Address {
         e.storage()
             .instance()
@@ -650,8 +744,6 @@ impl PredictionMarket {
             .get(&DataKey::BufferSeconds)
             .expect("BUFFER_SECONDS_NOT_FOUND")
     }
-
-
 
     /// Readonly function to check if a round is bettable
     /// # Parameters
@@ -941,6 +1033,20 @@ impl PredictionMarket {
         assert!(from_allowance >= amount, "INSUFFICIENT_ALLOWANCE");
 
         token_client.transfer_from(&current_contract_address, from, to, &amount);
+    }
+
+    fn safe_transfer_tokens(
+        _e: &Env,
+        token_client: &token::Client,
+        from: &Address,
+        to: &Address,
+        amount: i128,
+    ) {
+        let from_balance = token_client.balance(from);
+
+        assert!(from_balance >= amount, "INSUFFICIENT_BALANCE");
+
+        token_client.transfer(from, to, &amount);
     }
 }
 
