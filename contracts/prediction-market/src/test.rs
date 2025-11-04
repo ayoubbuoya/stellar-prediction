@@ -1,9 +1,12 @@
 #![cfg(test)]
 
-use mock_token::contract::MyToken;
-use soroban_sdk::{testutils::Address as _, Address, Env};
+use mock_token::contract::{MyToken, MyTokenClient};
+use soroban_sdk::{
+    testutils::{Address as _, Ledger},
+    Address, Env,
+};
 
-use crate::contract::{reflector_oracle, PredictionMarket, PredictionMarketClient};
+use crate::contract::{reflector_oracle, Position, PredictionMarket, PredictionMarketClient};
 
 const DEFAULT_TOKEN_ID: &str = "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC";
 const DEFAULT_ORACLE_ID: &str = "CCYOZJCOPG34LLQQ7N24YXBM7LL62R7ONMZ3G6WZAAYPB5OYKOMJRN63";
@@ -64,4 +67,23 @@ fn test_constructor() {
     assert_eq!(client.get_treasury_fee(), DEFAULT_TREASURY_FEE);
     assert_eq!(client.get_token_address(), token_id);
     assert_eq!(client.get_oracle_address(), oracle_id);
+}
+
+#[test]
+#[should_panic(expected = "GENESIS_ALREADY_STARTED")]
+fn test_genesis_start_round_twice() {
+    let env = Env::default();
+    let (_, _, _, client, _) = init_test(&env);
+
+    client.genesis_start_round();
+    client.genesis_start_round(); // Should panic
+}
+
+#[test]
+#[should_panic(expected = "GENESIS_NOT_STARTED")]
+fn test_genesis_lock_round_before_start() {
+    let env = Env::default();
+    let (_, _, _, client, _) = init_test(&env);
+
+    client.genesis_lock_round(); // Should panic
 }
