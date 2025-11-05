@@ -34,6 +34,7 @@ export class PredictionMarketService {
       contractId: this.config.contractId,
       networkPassphrase: this.config.networkPassphrase,
       rpcUrl: this.config.rpcUrl,
+      publicKey: this.config.ownerKeypair.publicKey(),
     });
   }
 
