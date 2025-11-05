@@ -4,6 +4,7 @@
   "version": "0.0.1",
   "private": true,
   "scripts": {
+    "start:backend": "npm run build --workspace=packages && cd backend && npm start",
     "dev": "concurrently \"stellar scaffold watch --build-clients\" \"vite\"",
     "start": "concurrently \"stellar scaffold watch --build-clients\" \"vite\"",
     "build": "tsc -b && vite build",
@@ -57,6 +58,7 @@
     "**/*": [
       "eslint --fix --no-warn-ignored",
       "prettier --write --ignore-unknown"
-    ]
+    ],
+    "!backend/**/*": []
   }
 }
