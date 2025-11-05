@@ -10,6 +10,7 @@ Backend API for the Stellar Prediction Market smart contract, providing endpoint
 - 🎯 Genesis round management
 - 📊 Round execution and monitoring
 - 💰 Oracle price integration
+- ⏰ Automated cron job for periodic round execution
 
 ## Prerequisites
 
@@ -90,6 +91,12 @@ http://localhost:3000/api-docs
 
 - **GET** `/api/oracle/price` - Get current XLM price from oracle
 
+### Cron Job Management
+
+- **POST** `/api/cron/start` - Start automatic round execution (requires genesis started & locked)
+- **POST** `/api/cron/pause` - Pause automatic round execution
+- **GET** `/api/cron/status` - Get cron job status
+
 ### Health Check
 
 - **GET** `/api/health` - Health check endpoint
@@ -138,6 +145,34 @@ Response:
 }
 ```
 
+### Start Automated Round Execution
+
+```bash
+curl -X POST http://localhost:3000/api/cron/start
+```
+
+Response:
+```json
+{
+  "success": true,
+  "message": "Cron job started successfully. Executing rounds every 300 seconds"
+}
+```
+
+### Pause Automated Round Execution
+
+```bash
+curl -X POST http://localhost:3000/api/cron/pause
+```
+
+Response:
+```json
+{
+  "success": true,
+  "message": "Cron job paused successfully"
+}
+```
+
 ## Architecture
 
 ```
@@ -148,19 +183,67 @@ backend/
 │   │   └── swagger.ts       # Swagger documentation config
 │   ├── controllers/
 │   │   ├── genesisController.ts   # Genesis endpoints
-│   │   └── roundsController.ts    # Rounds & oracle endpoints
+│   │   ├── roundsController.ts    # Rounds & oracle endpoints
+│   │   └── cronController.ts      # Cron job endpoints
 │   ├── routes/
 │   │   ├── genesis.ts       # Genesis routes
 │   │   ├── rounds.ts        # Rounds routes
-│   │   └── oracle.ts        # Oracle routes
+│   │   ├── oracle.ts        # Oracle routes
+│   │   └── cron.ts          # Cron routes
 │   ├── services/
-│   │   └── predictionMarketService.ts  # Contract interaction service
+│   │   ├── predictionMarketService.ts  # Contract interaction service
+│   │   └── cronService.ts              # Automated round execution service
 │   ├── utils.ts             # Utility functions (transaction submission)
 │   └── index.ts             # Main application
 ├── .env.example
 ├── package.json
 ├── tsconfig.json
 └── README.md
+```
+
+## Automated Round Execution (Cron Job)
+
+The backend includes an automated cron job service that can periodically execute rounds without manual intervention.
+
+### How It Works
+
+1. **Automatic Interval Detection**: The cron job automatically fetches the `intervalSeconds` from the smart contract
+2. **Genesis Validation**: Only starts if genesis is both started AND locked
+3. **Periodic Execution**: Executes `execute_round()` on the contract at the specified interval
+4. **Error Handling**: Continues running even if individual executions fail (logs errors)
+5. **Auto-Pause**: Automatically pauses if genesis state becomes invalid
+
+### Usage Flow
+
+1. Deploy and initialize your contract
+2. Start genesis round: `POST /api/genesis/start`
+3. Lock genesis round: `POST /api/genesis/lock`
+4. Start cron job: `POST /api/cron/start`
+5. The system will now automatically execute rounds every `intervalSeconds`
+
+### Control Endpoints
+
+- **Start**: Begins automatic execution (validates genesis state first)
+- **Pause**: Stops automatic execution (can be restarted later)
+- **Status**: Check if cron is running and the current interval
+
+### Example Workflow
+
+```bash
+# 1. Start genesis
+curl -X POST http://localhost:3000/api/genesis/start
+
+# 2. Wait for interval, then lock genesis
+curl -X POST http://localhost:3000/api/genesis/lock
+
+# 3. Start automated execution
+curl -X POST http://localhost:3000/api/cron/start
+
+# 4. Check status
+curl http://localhost:3000/api/cron/status
+
+# 5. Pause if needed
+curl -X POST http://localhost:3000/api/cron/pause
 ```
 
 ## Integration with Prediction Market Package

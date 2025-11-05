@@ -5,6 +5,7 @@ import { swaggerSpec } from './config/swagger.js';
 import genesisRoutes from './routes/genesis.js';
 import roundsRoutes from './routes/rounds.js';
 import oracleRoutes from './routes/oracle.js';
+import cronRoutes from './routes/cron.js';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -40,6 +41,7 @@ app.get('/api/health', (_req, res) => {
 app.use('/api/genesis', genesisRoutes);
 app.use('/api/rounds', roundsRoutes);
 app.use('/api/oracle', oracleRoutes);
+app.use('/api/cron', cronRoutes);
 
 // Error handling middleware
 app.use((err: Error, _req: express.Request, res: express.Response) => {

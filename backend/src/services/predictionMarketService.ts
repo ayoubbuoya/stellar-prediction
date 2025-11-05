@@ -173,4 +173,14 @@ export class PredictionMarketService {
       throw error;
     }
   }
+
+  async getIntervalSeconds(): Promise<bigint> {
+    try {
+      const result = await this.client.get_interval_seconds();
+      return BigInt(result.result?.toString() || "0");
+    } catch (error) {
+      console.error("Error in getIntervalSeconds:", error);
+      throw error;
+    }
+  }
 }
