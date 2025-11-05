@@ -40,7 +40,7 @@ export class CronService {
       this.intervalSeconds = Number(intervalSecondsFromContract);
 
       // Convert seconds to milliseconds
-      const intervalMs = this.intervalSeconds * 1000;
+      const intervalMs = this.intervalSeconds * 1000 + 5000; // Adding 5 seconds buffer
 
       console.log(`Starting cron job with interval: ${this.intervalSeconds} seconds (${intervalMs}ms)`);
 
