@@ -2,6 +2,9 @@
   "name": "stellar-prediction-backend",
   "version": "1.0.0",
   "type": "module",
+  "scripts": {
+    "start": "tsx src/index.ts"
+  },
   "dependencies": {
     "@stellar/stellar-sdk": "^14.3.0",
     "cors": "^2.8.5",
