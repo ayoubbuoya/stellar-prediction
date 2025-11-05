@@ -1,25 +1,50 @@
 import React from "react";
-import { GuessTheNumber } from "../components/GuessTheNumber";
 import {
   Card,
-  CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
 } from "../components/ui/card";
-import { Code2, Wallet, Zap } from "lucide-react";
+import { Code2, Wallet, Zap, TrendingUp, Target } from "lucide-react";
+import { Button } from "../components/ui/button";
 
 const Home: React.FC = () => (
-  <div className="container mx-auto px-4 py-12 space-y-12">
-    {/* Hero Section */}
-    <div className="text-center space-y-4 py-8">
-      <h1 className="text-4xl md:text-5xl font-heading font-bold text-foreground">
-        Welcome to Stellar Prediction Market! 🚀
-      </h1>
-      <p className="text-lg md:text-xl text-foreground/80 font-base max-w-2xl mx-auto">
-        A decentralized prediction market built on Stellar blockchain with smart
-        contracts. Place bets, create markets, and earn rewards!
-      </p>
+  <div className="container mx-auto px-4 py-12 space-y-16">
+    {/* Hero Section with Image */}
+    <div className="grid md:grid-cols-2 gap-12 items-center py-8">
+      <div className="space-y-6">
+        <div className="inline-block">
+          <span className="px-4 py-2 bg-accent border-2 border-border rounded-base text-sm font-heading font-bold shadow-shadow">
+            Decentralized Predictions
+          </span>
+        </div>
+        <h1 className="text-4xl md:text-6xl font-heading font-bold text-foreground leading-tight">
+          Predict the Future,
+          <span className="block text-main"> Earn Rewards</span>
+        </h1>
+        <p className="text-lg md:text-xl text-foreground/80 font-base">
+          Join the most exciting prediction market on Stellar blockchain. Place
+          bets on real-world events, create your own markets, and win big.
+        </p>
+        <div className="flex flex-wrap gap-4">
+          <Button size="lg" className="gap-2">
+            <TrendingUp className="w-5 h-5" />
+            Start Predicting
+          </Button>
+          <Button size="lg" variant="outline" className="gap-2">
+            <Target className="w-5 h-5" />
+            Explore Markets
+          </Button>
+        </div>
+      </div>
+
+      <div className="flex justify-center">
+        <img
+          src="/neo 3.png"
+          alt="Prediction Market Illustration"
+          className="w-full max-w-md h-auto"
+        />
+      </div>
     </div>
 
     {/* Feature Cards */}
@@ -61,83 +86,6 @@ const Home: React.FC = () => (
         </CardHeader>
       </Card>
     </div>
-
-    {/* Development Guide */}
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-2xl">🛠️ Development Guide</CardTitle>
-        <CardDescription>Get started with building on Stellar</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div>
-          <h3 className="font-heading font-semibold text-lg mb-2">
-            Develop your contracts
-          </h3>
-          <p className="text-sm text-foreground/80 font-base">
-            Take a look in the{" "}
-            <code className="px-2 py-1 bg-muted rounded text-xs">
-              contracts/
-            </code>{" "}
-            directory. Compare that to what you see in the{" "}
-            <code className="px-2 py-1 bg-muted rounded text-xs">
-              npm run dev
-            </code>{" "}
-            output (which itself is running{" "}
-            <code className="px-2 py-1 bg-muted rounded text-xs">
-              stellar scaffold watch
-            </code>
-            ).
-          </p>
-        </div>
-
-        <div>
-          <h3 className="font-heading font-semibold text-lg mb-2">
-            Interact with contracts
-          </h3>
-          <p className="text-sm text-foreground/80 font-base mb-2">
-            Scaffold stellar automatically builds, deploys, and generates
-            frontend packages for each contract:
-          </p>
-          <pre className="bg-muted p-3 rounded-base border-2 border-border text-xs overflow-x-auto">
-            <code>import game from "./contracts/guess_the_number";</code>
-          </pre>
-        </div>
-
-        <div>
-          <h3 className="font-heading font-semibold text-lg mb-2">
-            Deploy your app
-          </h3>
-          <p className="text-sm text-foreground/80 font-base">
-            Use{" "}
-            <code className="px-2 py-1 bg-muted rounded text-xs">
-              stellar registry publish
-            </code>{" "}
-            and{" "}
-            <code className="px-2 py-1 bg-muted rounded text-xs">
-              stellar registry deploy
-            </code>{" "}
-            commands to deploy to the Stellar network. Build with{" "}
-            <code className="px-2 py-1 bg-muted rounded text-xs">
-              npm run build
-            </code>
-            .
-          </p>
-        </div>
-      </CardContent>
-    </Card>
-
-    {/* Demo Component */}
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-2xl">🎮 Try the Demo</CardTitle>
-        <CardDescription>
-          Test the GuessTheNumber contract interaction
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <GuessTheNumber />
-      </CardContent>
-    </Card>
   </div>
 );
 
