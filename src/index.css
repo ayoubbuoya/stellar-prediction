@@ -1,2 +1,72 @@
 /* Import font for Stellar Design System */
 @import url("https://fonts.googleapis.com/css2?family=Inter:wght@100..900&family=Inconsolata:wght@500&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Custom Color Palette */
+    /* 38B6FF - Bright Blue (Main/Primary) */
+    /* DBF4A7 - Light Yellow-Green (Accent) */
+    /* D5F9DE - Mint Green (Secondary) */
+    /* 080708 - Almost Black (Text/Border) */
+    /* DF2935 - Red (Destructive/Error) */
+
+    --background: 0 0% 100%;
+    --foreground: 240 10% 3.9%;
+
+    --main: 200 100% 61%; /* #38B6FF */
+    --main-foreground: 240 10% 3.9%;
+
+    --secondary-background: 84 73% 81%; /* #DBF4A7 */
+
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 3.9%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 3.9%;
+
+    --primary: 200 100% 61%; /* #38B6FF */
+    --primary-foreground: 240 10% 3.9%;
+
+    --secondary: 145 80% 90%; /* #D5F9DE */
+    --secondary-foreground: 240 10% 3.9%;
+
+    --muted: 84 73% 81%; /* #DBF4A7 */
+    --muted-foreground: 240 3.8% 46.1%;
+
+    --accent: 84 73% 81%; /* #DBF4A7 */
+    --accent-foreground: 240 10% 3.9%;
+
+    --destructive: 354 70% 54%; /* #DF2935 */
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 240 10% 3.9%; /* #080708 */
+    --input: 240 5.9% 10%;
+    --ring: 240 10% 3.9%;
+
+    --radius: 20px;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: "Inter", sans-serif;
+  }
+}
+
+@layer utilities {
+  .shadow-shadow {
+    box-shadow: 4px 4px 0px 0px #080708;
+  }
+
+  .shadow-nav {
+    box-shadow: 4px 4px 0px 0px #080708;
+  }
+}

@@ -1,52 +1,66 @@
 import { useState } from "react";
-import { Button, Text, Modal, Profile } from "@stellar/design-system";
 import { useWallet } from "../hooks/useWallet";
 import { useWalletBalance } from "../hooks/useWalletBalance";
 import { connectWallet, disconnectWallet } from "../util/wallet";
+import { Button } from "./ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "./ui/dialog";
 
 export const WalletButton = () => {
   const [showDisconnectModal, setShowDisconnectModal] = useState(false);
   const { address, isPending } = useWallet();
   const { xlm, ...balance } = useWalletBalance();
-  const buttonLabel = isPending ? "Loading..." : "Connect";
+  const buttonLabel = isPending ? "Loading..." : "Connect Wallet";
 
   if (!address) {
     return (
-      <Button variant="primary" size="md" onClick={() => void connectWallet()}>
+      <Button
+        variant="default"
+        size="default"
+        onClick={() => void connectWallet()}
+        className="font-heading"
+      >
         {buttonLabel}
       </Button>
     );
   }
 
   return (
-    <div
-      style={{
-        display: "flex",
-        flexDirection: "row",
-        alignItems: "center",
-        gap: "5px",
-        opacity: balance.isLoading ? 0.6 : 1,
-      }}
-    >
-      <Text as="div" size="sm">
-        Wallet Balance: {xlm} XLM
-      </Text>
+    <div className="flex flex-row items-center gap-3">
+      <div
+        className="px-4 py-2 rounded-base border-2 border-border bg-secondary text-foreground font-base text-sm"
+        style={{ opacity: balance.isLoading ? 0.6 : 1 }}
+      >
+        Balance: {xlm} XLM
+      </div>
 
-      <div id="modalContainer">
-        <Modal
-          visible={showDisconnectModal}
-          onClose={() => setShowDisconnectModal(false)}
-          parentId="modalContainer"
-        >
-          <Modal.Heading>
-            Connected as{" "}
-            <code style={{ lineBreak: "anywhere" }}>{address}</code>. Do you
-            want to disconnect?
-          </Modal.Heading>
-          <Modal.Footer itemAlignment="stack">
+      <Dialog open={showDisconnectModal} onOpenChange={setShowDisconnectModal}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Disconnect Wallet</DialogTitle>
+            <DialogDescription className="break-all">
+              Connected as{" "}
+              <code className="text-xs bg-muted px-1 py-0.5 rounded">
+                {address}
+              </code>
+              . Do you want to disconnect?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
             <Button
-              size="md"
-              variant="primary"
+              variant="outline"
+              onClick={() => setShowDisconnectModal(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
               onClick={() => {
                 void disconnectWallet().then(() =>
                   setShowDisconnectModal(false),
@@ -55,25 +69,18 @@ export const WalletButton = () => {
             >
               Disconnect
             </Button>
-            <Button
-              size="md"
-              variant="tertiary"
-              onClick={() => {
-                setShowDisconnectModal(false);
-              }}
-            >
-              Cancel
-            </Button>
-          </Modal.Footer>
-        </Modal>
-      </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
-      <Profile
-        publicAddress={address}
-        size="md"
-        isShort
+      <Button
+        variant="secondary"
+        size="default"
         onClick={() => setShowDisconnectModal(true)}
-      />
+        className="font-mono text-xs"
+      >
+        {address.slice(0, 4)}...{address.slice(-4)}
+      </Button>
     </div>
   );
 };
