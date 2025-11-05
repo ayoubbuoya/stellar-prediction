@@ -114,22 +114,28 @@ export class CronService {
       const isGenesisLocked = await this.predictionMarketService.getIsGenesisLocked();
 
       if (!isGenesisStarted || !isGenesisLocked) {
-        console.warn('Genesis is not started or locked. Pausing cron job.');
+        console.warn(`[${new Date().toISOString()}] Genesis is not started or locked. Pausing cron job.`);
         this.pause();
         return;
       }
 
       // Execute the round
       const result = await this.predictionMarketService.executeRound();
-      
-      console.log(`[${new Date().toISOString()}] Round executed successfully:`, {
+
+      console.log(`[${new Date().toISOString()}] ✅ Round executed successfully:`, {
         transactionHash: result.transactionHash,
         epoch: result.epoch,
       });
     } catch (error) {
-      console.error(`[${new Date().toISOString()}] Error executing round:`, error);
-      // Don't stop the cron job on error, just log it
-      // The next execution will try again
+      // Log the error but don't stop the cron job
+      // The cron will continue and try again at the next scheduled time
+      console.error(`[${new Date().toISOString()}] ❌ Error executing round (will retry at next interval):`, {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+
+      // Explicitly continue - the interval will trigger the next execution
+      // No need to pause or stop the cron job
     }
   }
 }
