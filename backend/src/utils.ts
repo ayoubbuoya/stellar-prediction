@@ -1,8 +1,10 @@
 import { TransactionBuilder } from "@stellar/stellar-sdk";
 import { Server, Api } from "@stellar/stellar-sdk/rpc";
 import { Keypair } from "@stellar/stellar-sdk";
+import { formatUnits } from "viem";
 
 export const STELLAR_WAIT_MAX_RETRIES = 10;
+export const ORACLE_PRICE_DECIMALS = 14;
 
 export interface StellarConfig {
   networkPassphrase: string;
@@ -100,4 +102,13 @@ export async function submitAndWaitForTransaction(
     hash: sentTx.hash,
     response: txResponse,
   };
+}
+
+/**
+ * Formats the oracle price from bigint to a string with appropriate decimals
+ * @param price - The oracle price as bigint
+ * @returns string - Formatted price string
+ */
+export function formatOraclePrice(price: bigint): string {
+  return formatUnits(price, ORACLE_PRICE_DECIMALS);
 }

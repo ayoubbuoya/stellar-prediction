@@ -1,5 +1,6 @@
-import { Request, Response } from 'express';
-import { PredictionMarketService } from '../services/predictionMarketService.js';
+import { Request, Response } from "express";
+import { PredictionMarketService } from "../services/predictionMarketService.js";
+import { formatOraclePrice } from "../utils.ts";
 
 const service = new PredictionMarketService();
 
@@ -44,14 +45,14 @@ export const executeRound = async (req: Request, res: Response) => {
 
     return res.status(200).json({
       success: true,
-      message: 'Round executed successfully',
+      message: "Round executed successfully",
       data: result,
     });
   } catch (error) {
-    console.error('Error executing round:', error);
+    console.error("Error executing round:", error);
     return res.status(500).json({
       success: false,
-      error: error instanceof Error ? error.message : 'Failed to execute round',
+      error: error instanceof Error ? error.message : "Failed to execute round",
     });
   }
 };
@@ -99,11 +100,11 @@ export const executeRound = async (req: Request, res: Response) => {
 export const getRound = async (req: Request, res: Response) => {
   try {
     const { epoch } = req.params;
-    
+
     if (!epoch) {
       return res.status(400).json({
         success: false,
-        error: 'Epoch parameter is required',
+        error: "Epoch parameter is required",
       });
     }
 
@@ -127,10 +128,13 @@ export const getRound = async (req: Request, res: Response) => {
       },
     });
   } catch (error) {
-    console.error('Error getting round:', error);
+    console.error("Error getting round:", error);
     return res.status(500).json({
       success: false,
-      error: error instanceof Error ? error.message : 'Failed to get round information',
+      error:
+        error instanceof Error
+          ? error.message
+          : "Failed to get round information",
     });
   }
 };
@@ -177,10 +181,11 @@ export const getCurrentEpoch = async (req: Request, res: Response) => {
       },
     });
   } catch (error) {
-    console.error('Error getting current epoch:', error);
+    console.error("Error getting current epoch:", error);
     return res.status(500).json({
       success: false,
-      error: error instanceof Error ? error.message : 'Failed to get current epoch',
+      error:
+        error instanceof Error ? error.message : "Failed to get current epoch",
     });
   }
 };
@@ -226,15 +231,16 @@ export const getOraclePrice = async (req: Request, res: Response) => {
     return res.status(200).json({
       success: true,
       data: {
-        price: price.toString(),
+        price: formatOraclePrice(price),
         timestamp: new Date().toISOString(),
       },
     });
   } catch (error) {
-    console.error('Error getting oracle price:', error);
+    console.error("Error getting oracle price:", error);
     return res.status(500).json({
       success: false,
-      error: error instanceof Error ? error.message : 'Failed to get oracle price',
+      error:
+        error instanceof Error ? error.message : "Failed to get oracle price",
     });
   }
 };
