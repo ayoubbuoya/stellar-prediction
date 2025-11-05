@@ -50,7 +50,11 @@ export const connectWallet = async () => {
 
 export const disconnectWallet = async () => {
   await kit.disconnect();
+  // Clean up all wallet-related storage items
   storage.removeItem("walletId");
+  storage.removeItem("walletAddress");
+  storage.removeItem("walletNetwork");
+  storage.removeItem("networkPassphrase");
 };
 
 function getHorizonHost(mode: string) {

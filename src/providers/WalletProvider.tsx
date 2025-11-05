@@ -23,7 +23,7 @@ const initialState = {
   networkPassphrase: undefined,
 };
 
-const POLL_INTERVAL = 1000;
+const POLL_INTERVAL = 5000; // Increased from 1s to 5s to reduce wallet extension load
 
 export const WalletContext = // eslint-disable-line react-refresh/only-export-components
   createContext<WalletContextType>({ isPending: true });
@@ -104,12 +104,23 @@ export const WalletProvider = ({ children }: { children: React.ReactNode }) => {
           updateState({ ...a, ...n });
         }
       } catch (e) {
-        // If `getNetwork` or `getAddress` throw errors... sign the user out???
-        nullify();
-        // then log the error (instead of throwing) so we have visibility
-        // into the error while working on Scaffold Stellar but we do not
-        // crash the app process
-        console.error(e);
+        // Don't immediately disconnect on errors - wallet extensions can be temporarily unavailable
+        // Only disconnect if the error indicates the wallet is truly disconnected
+        const errorMessage = e instanceof Error ? e.message : String(e);
+
+        // Check if it's a critical error that requires disconnection
+        const isCriticalError =
+          errorMessage.includes("User declined") ||
+          errorMessage.includes("not installed") ||
+          errorMessage.includes("rejected");
+
+        if (isCriticalError) {
+          console.warn("Critical wallet error, disconnecting:", errorMessage);
+          nullify();
+        } else {
+          // For temporary errors (network issues, rate limiting, etc.), just log and retry
+          console.warn("Temporary wallet error (will retry):", errorMessage);
+        }
       } finally {
         popupLock.current = false;
       }

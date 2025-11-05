@@ -25,6 +25,7 @@ export const WalletButton = () => {
         size="default"
         onClick={() => void connectWallet()}
         className="font-heading"
+        data-wallet-button
       >
         {buttonLabel}
       </Button>
