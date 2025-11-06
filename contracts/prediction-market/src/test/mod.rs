@@ -186,5 +186,5 @@ fn test_genesis_round_flow() {
 
     assert_eq!(client.get_is_genesis_locked(), true);
     assert_eq!(client.get_current_epoch(), 2);
-    assert_eq!(client.get_round(&0u128).lock_timestamp, lock_time);
+    assert_eq!(client.get_round(&1u128).lock_timestamp, lock_time);
 }
