@@ -8,8 +8,8 @@ stellar contract deploy \
 --alias prediction_market \
 -- \
 --owner $(stellar keys address buoya) \
---intervals_seconds 60 \
---buffer_seconds 6000 \
+--intervals_seconds 300 \
+--buffer_seconds 600000000 \
 --min_bet_amount 10000000 \
 --token_address CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC \
 --treasury_fee 500 \

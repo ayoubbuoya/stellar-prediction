@@ -318,6 +318,13 @@ impl PredictionMarket {
         e.storage().instance().set(&DataKey::IsGenesisLocked, &true);
     }
 
+    /// Function to execute a round
+    /// Only callable by the owner
+    /// # Events
+    /// - `ROUND_LOCKED`: Emitted when a round is locked
+    /// - `ROUND_ENDED`: Emitted when a round is ended
+    /// - `REWARDS_CALCULATED`: Emitted when rewards are calculated
+    /// - `ROUND_STARTED`: Emitted when a new round is started
     #[only_owner]
     pub fn execute_round(e: &Env) {
         let is_genesis_locked: bool = e
