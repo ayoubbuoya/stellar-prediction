@@ -396,7 +396,7 @@ impl PredictionMarket {
         assert!(amount >= min_bet_amount, "BET_AMOUNT_TOO_LOW");
 
         // CHECK: User should not have already placed a bet in this round
-        assert!(Self::has_bet(e, epoch, &user), "ALREADY_BET_FOR_ROUND");
+        assert!(!Self::has_bet(e, epoch, &user), "ALREADY_BET_FOR_ROUND");
 
         // Get Token Address
         let token_address: Address = e
@@ -494,7 +494,7 @@ impl PredictionMarket {
         assert!(amount >= min_bet_amount, "BET_AMOUNT_TOO_LOW");
 
         // CHECK: User should not have already placed a bet in this round
-        assert!(Self::has_bet(e, epoch, &user), "ALREADY_BET_FOR_ROUND");
+        assert!(!Self::has_bet(e, epoch, &user), "ALREADY_BET_FOR_ROUND");
 
         // Get Token Address
         let token_address: Address = e
