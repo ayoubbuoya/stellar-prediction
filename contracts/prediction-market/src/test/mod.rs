@@ -188,3 +188,52 @@ fn test_genesis_round_flow() {
     assert_eq!(client.get_current_epoch(), 2);
     assert_eq!(client.get_round(&1u128).lock_timestamp, lock_time);
 }
+
+#[test]
+fn test_xlm_oracle_price() {
+    let env = Env::default();
+    let (_, _, _, client, _) = init_test(&env);
+
+    // Test that we can get oracle price
+    let price = client.get_xlm_oracle_price();
+    assert!(price > 0);
+}
+
+#[test]
+fn test_bet_with_exact_minimum() {
+    let env = Env::default();
+    let (_, _, token_id, client, contract_id) = init_test(&env);
+
+    // Setup genesis rounds
+    client.genesis_start_round();
+    let round = client.get_round(&1);
+    env.ledger().set_timestamp(round.lock_timestamp);
+    client.genesis_lock_round();
+
+    // get current epoch
+    let current_epoch = client.get_current_epoch();
+    assert_eq!(current_epoch, 2);
+
+    // Get round info
+    let round = client.get_round(&2);
+
+    log!(&env, "Round: {:?}", round);
+
+    assert_eq!(round.start_timestamp, env.ledger().timestamp());
+
+    env.ledger().set_timestamp(round.start_timestamp + 1);
+
+    // Create a user and give them tokens
+    let user = Address::generate(&env);
+    let token_client = MyTokenClient::new(&env, &token_id);
+
+    env.mock_all_auths();
+    token_client.mint(&user, &100000000);
+    token_client.approve(&user, &contract_id, &100000000, &99999);
+
+    // Place bet with exact minimum amount - should succeed
+    client.bet_bull(&current_epoch, &user, &DEFAULT_MIN_BET_AMOUNT);
+
+    let bet_info = client.get_bet_info(&current_epoch, &user);
+    assert_eq!(bet_info.amount, DEFAULT_MIN_BET_AMOUNT);
+}
