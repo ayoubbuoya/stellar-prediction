@@ -405,7 +405,7 @@ impl PredictionMarket {
         // CHECK: User should not have already placed a bet in this round
         assert!(!Self::has_bet(e, epoch, &user), "ALREADY_BET_FOR_ROUND");
 
-        // Get Token Address
+        // Get Token Addressw
         let token_address: Address = e
             .storage()
             .instance()

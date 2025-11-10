@@ -353,14 +353,6 @@ export const usePredictionMarket = () => {
       try {
         setLoadingStates((prev) => ({ ...prev, betting: true }));
 
-        // // First, approve the token allowance
-        // console.log("🔐 Step 1: Approving token allowance...");
-        // const approved = await approveToken(amount);
-        // if (!approved) {
-        //   throw new Error("Token approval failed");
-
-        // }
-
         // Then place the bet
         console.log("🎲 Step 2: Placing bet...");
 
