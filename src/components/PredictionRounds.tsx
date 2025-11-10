@@ -16,6 +16,7 @@ import {
 import { RoundStatus } from "../types/round";
 import { usePredictionMarket } from "../hooks/usePredictionMarket";
 import { useWallet } from "../hooks/useWallet";
+import { formatUnits } from "viem";
 
 interface RoundCardProps {
   round: Round;
@@ -41,7 +42,7 @@ const RoundCard: React.FC<RoundCardProps> = ({
   };
 
   const formatPrice = (price: bigint | number, decimals = 4) => {
-    return `$${(Number(price) / 10000000).toFixed(decimals)}`;
+    return `$${Number(formatUnits(price as bigint, 14)).toFixed(decimals)}`;
   };
 
   const getTimeRemaining = (timestamp: bigint | number) => {
@@ -70,17 +71,18 @@ const RoundCard: React.FC<RoundCardProps> = ({
   }, [round, status]);
 
   const totalPayout = Number(round.bull_amount) + Number(round.bear_amount);
-  const bullPercentage = totalPayout > 0
-    ? (Number(round.bull_amount) / totalPayout) * 100
-    : 50;
+  const bullPercentage =
+    totalPayout > 0 ? (Number(round.bull_amount) / totalPayout) * 100 : 50;
   const bearPercentage = 100 - bullPercentage;
 
-  const bullPayout = totalPayout > 0 && Number(round.bull_amount) > 0
-    ? (totalPayout / Number(round.bull_amount)).toFixed(2)
-    : "0.00";
-  const bearPayout = totalPayout > 0 && Number(round.bear_amount) > 0
-    ? (totalPayout / Number(round.bear_amount)).toFixed(2)
-    : "0.00";
+  const bullPayout =
+    totalPayout > 0 && Number(round.bull_amount) > 0
+      ? (totalPayout / Number(round.bull_amount)).toFixed(2)
+      : "0.00";
+  const bearPayout =
+    totalPayout > 0 && Number(round.bear_amount) > 0
+      ? (totalPayout / Number(round.bear_amount)).toFixed(2)
+      : "0.00";
 
   const isLive = status === RoundStatus.LIVE;
   const isCalculating = status === RoundStatus.CALCULATING;
@@ -91,15 +93,18 @@ const RoundCard: React.FC<RoundCardProps> = ({
     hasResult && Number(round.close_price) > Number(round.lock_price)
       ? "BULL"
       : hasResult && Number(round.close_price) < Number(round.lock_price)
-      ? "BEAR"
-      : "DRAW";
+        ? "BEAR"
+        : "DRAW";
 
   const getStatusBadge = () => {
-    const baseClasses = "inline-flex items-center gap-1.5 rounded-base px-3 py-1.5 text-xs font-heading font-bold border-2 shadow-shadow";
+    const baseClasses =
+      "inline-flex items-center gap-1.5 rounded-base px-3 py-1.5 text-xs font-heading font-bold border-2 shadow-shadow";
     switch (status) {
       case RoundStatus.LIVE:
         return (
-          <div className={`${baseClasses} bg-[#31D0AA] border-border text-white`}>
+          <div
+            className={`${baseClasses} bg-[#31D0AA] border-border text-white`}
+          >
             <Circle className={`h-2 w-2 fill-current animate-pulse`} />
             <span>LIVE</span>
           </div>
@@ -113,7 +118,9 @@ const RoundCard: React.FC<RoundCardProps> = ({
         );
       case RoundStatus.CALCULATING:
         return (
-          <div className={`${baseClasses} bg-yellow-500 border-border text-white`}>
+          <div
+            className={`${baseClasses} bg-yellow-500 border-border text-white`}
+          >
             <Circle className="h-2 w-2 fill-current animate-pulse" />
             <span>CALCULATING</span>
           </div>
@@ -160,14 +167,14 @@ const RoundCard: React.FC<RoundCardProps> = ({
         {/* Header */}
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              {getStatusBadge()}
-            </div>
+            <div className="flex items-center gap-2">{getStatusBadge()}</div>
             <div className="text-right">
               <div className="text-xs text-foreground/60 font-base">
                 #{round.epoch.toString()}
               </div>
-              {(isLive || status === RoundStatus.NEXT || status === RoundStatus.LATER) && (
+              {(isLive ||
+                status === RoundStatus.NEXT ||
+                status === RoundStatus.LATER) && (
                 <div className="font-mono text-sm font-bold text-main mt-0.5">
                   {timeRemaining}
                 </div>
@@ -181,7 +188,9 @@ const RoundCard: React.FC<RoundCardProps> = ({
           <div>
             <h3 className="text-lg font-heading font-bold mb-2">XLM/USD</h3>
             <div className="font-mono text-2xl font-bold">
-              {Number(round.lock_price) > 0 ? formatPrice(BigInt(round.lock_price), 5) : "$0.0000"}
+              {Number(round.lock_price) > 0
+                ? formatPrice(BigInt(round.lock_price), 5)
+                : "$0.0000"}
             </div>
           </div>
 
@@ -278,8 +287,8 @@ const RoundCard: React.FC<RoundCardProps> = ({
                       winner === "BULL"
                         ? "text-[#31D0AA]"
                         : winner === "BEAR"
-                        ? "text-destructive"
-                        : "text-foreground/40"
+                          ? "text-destructive"
+                          : "text-foreground/40"
                     }`}
                   >
                     {winner}
@@ -387,7 +396,8 @@ const RoundCard: React.FC<RoundCardProps> = ({
               {betDirection === "up" ? "Enter UP" : "Enter DOWN"}
             </DialogTitle>
             <DialogDescription>
-              Place your bet on {betDirection === "up" ? "UP" : "DOWN"} for round #{round.epoch.toString()}
+              Place your bet on {betDirection === "up" ? "UP" : "DOWN"} for
+              round #{round.epoch.toString()}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -415,7 +425,9 @@ const RoundCard: React.FC<RoundCardProps> = ({
                   {betAmount
                     ? (
                         parseFloat(betAmount) *
-                        parseFloat(betDirection === "up" ? bullPayout : bearPayout)
+                        parseFloat(
+                          betDirection === "up" ? bullPayout : bearPayout
+                        )
                       ).toFixed(2)
                     : "0.00"}{" "}
                   XLM
@@ -424,19 +436,14 @@ const RoundCard: React.FC<RoundCardProps> = ({
             </div>
           </div>
           <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setShowBetModal(false)}
-            >
+            <Button variant="outline" onClick={() => setShowBetModal(false)}>
               Cancel
             </Button>
             <Button
               onClick={handleConfirmBet}
               disabled={!betAmount || parseFloat(betAmount) <= 0}
               className={
-                betDirection === "up"
-                  ? "bg-[#31D0AA] hover:bg-[#2AB896]"
-                  : ""
+                betDirection === "up" ? "bg-[#31D0AA] hover:bg-[#2AB896]" : ""
               }
             >
               Confirm Bet
@@ -460,14 +467,20 @@ export const PredictionRounds: React.FC = () => {
     isLoadingRounds,
     isLoadingBetting,
     error,
+    fetchRound,
+    fetchCurrentEpoch,
   } = usePredictionMarket();
 
   const [rounds, setRounds] = useState<(Round | null)[]>([]);
-  const [oraclePrice, setOraclePrice] = useState<bigint | null>(null);
+  const [oraclePrice, setOraclePrice] = useState<number | null>(null);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
 
   // Calculate round status based on timestamps and current epoch
-  const calculateRoundStatus = (round: Round, currentEpochNum: bigint): RoundStatus => {
+  const calculateRoundStatus = (
+    round: Round,
+    currentEpochNum: bigint
+  ): RoundStatus => {
+    console.log("calculateRoundStatus", round, currentEpochNum);
     const now = Math.floor(Date.now() / 1000);
     const epoch = Number(round.epoch);
     const current = Number(currentEpochNum);
@@ -497,56 +510,24 @@ export const PredictionRounds: React.FC = () => {
     return RoundStatus.LATER;
   };
 
-  // Fetch rounds from backend API
-  const fetchRoundFromAPI = async (epoch: number) => {
-    try {
-      const response = await fetch(`http://localhost:3000/api/rounds/${epoch}`);
-      const data = await response.json();
-
-      if (data.success && data.data) {
-        const roundData = data.data;
-        return {
-          epoch: BigInt(roundData.epoch),
-          start_timestamp: BigInt(roundData.startTimestamp),
-          lock_timestamp: BigInt(roundData.lockTimestamp),
-          close_timestamp: BigInt(roundData.closeTimestamp),
-          lock_price: BigInt(roundData.lockPrice),
-          close_price: BigInt(roundData.closePrice),
-          total_amount: BigInt(roundData.totalAmount),
-          bull_amount: BigInt(roundData.bullAmount),
-          bear_amount: BigInt(roundData.bearAmount),
-          reward_amount: BigInt(roundData.rewardAmount),
-          reward_base_cal_amount: BigInt(roundData.rewardBaseCalAmount),
-        } as Round;
-      }
-      return null;
-    } catch (err) {
-      console.error(`Failed to fetch round ${epoch} from API:`, err);
-      return null;
-    }
-  };
-
   // Fetch rounds and oracle price
   const loadData = async () => {
     try {
-      // Fetch current epoch from backend API
-      const currentResponse = await fetch('http://localhost:3000/api/rounds/current');
-      const currentData = await currentResponse.json();
+      // Fetch current epoch
+      const currentEpoch = await fetchCurrentEpoch();
 
-      if (!currentData.success || !currentData.data) {
+      if (!currentEpoch) {
         console.error("Failed to fetch current epoch");
         return;
       }
 
-      const currentEpoch = parseInt(currentData.data.currentEpoch);
-
       // Fetch previous 2 rounds, current round, and next 2 rounds from backend API
       const roundPromises = [
-        fetchRoundFromAPI(currentEpoch - 2),
-        fetchRoundFromAPI(currentEpoch - 1),
-        fetchRoundFromAPI(currentEpoch),
-        fetchRoundFromAPI(currentEpoch + 1),
-        fetchRoundFromAPI(currentEpoch + 2),
+        fetchRound(currentEpoch - 2n),
+        fetchRound(currentEpoch - 1n),
+        fetchRound(currentEpoch),
+        fetchRound(currentEpoch + 1n),
+        fetchRound(currentEpoch + 2n),
       ];
 
       const fetchedRounds = await Promise.all(roundPromises);
@@ -562,8 +543,11 @@ export const PredictionRounds: React.FC = () => {
 
       // Fetch oracle price from smart contract
       const price = await getOraclePrice();
+
       if (price) {
-        setOraclePrice(price);
+        const formattedPrice = formatUnits(price, 14);
+        console.log("Oracle Price:", formattedPrice);
+        setOraclePrice(Number(formattedPrice));
       }
     } catch (err) {
       console.error("Failed to load prediction rounds:", err);
@@ -575,19 +559,23 @@ export const PredictionRounds: React.FC = () => {
   // Initial load
   useEffect(() => {
     loadData();
-  }, []);
+  }, [currentEpoch]);
 
-  // Auto-refresh every 10 seconds
+  // Auto-refresh every 100 seconds
   useEffect(() => {
     const interval = setInterval(() => {
       loadData();
-    }, 10000);
+    }, 100_000);
 
     return () => clearInterval(interval);
   }, []);
 
   // Handle betting
-  const handleBet = async (direction: "up" | "down", epoch: bigint, amount: string) => {
+  const handleBet = async (
+    direction: "up" | "down",
+    epoch: bigint,
+    amount: string
+  ) => {
     if (!address) {
       console.error("❌ Please connect your wallet first");
       return;
@@ -596,7 +584,9 @@ export const PredictionRounds: React.FC = () => {
     const amountInStroops = BigInt(Math.floor(parseFloat(amount) * 10000000)); // Convert XLM to stroops
 
     try {
-      console.log(`🎯 Placing ${direction} bet on epoch ${epoch} with amount ${amount} XLM (${amountInStroops} stroops)`);
+      console.log(
+        `🎯 Placing ${direction} bet on epoch ${epoch} with amount ${amount} XLM (${amountInStroops} stroops)`
+      );
 
       if (direction === "up") {
         await betBull(epoch, amountInStroops);
@@ -632,7 +622,9 @@ export const PredictionRounds: React.FC = () => {
     return (
       <div className="w-full flex items-center justify-center py-20">
         <div className="text-center">
-          <p className="text-lg font-heading text-destructive mb-2">Failed to load rounds</p>
+          <p className="text-lg font-heading text-destructive mb-2">
+            Failed to load rounds
+          </p>
           <p className="text-sm text-muted-foreground">{error}</p>
           <Button onClick={loadData} className="mt-4">
             Retry
@@ -648,7 +640,9 @@ export const PredictionRounds: React.FC = () => {
       <div className="w-full flex items-center justify-center py-20">
         <div className="text-center">
           <p className="text-lg font-heading">No active rounds available</p>
-          <p className="text-sm text-muted-foreground mt-2">Please check back later</p>
+          <p className="text-sm text-muted-foreground mt-2">
+            Please check back later
+          </p>
         </div>
       </div>
     );
@@ -661,7 +655,8 @@ export const PredictionRounds: React.FC = () => {
         <div className="max-w-2xl mx-auto mb-6 px-4">
           <div className="bg-accent/20 border-2 border-border rounded-base p-4 shadow-shadow">
             <p className="text-sm font-heading text-center">
-              ℹ️ Only the current round is available. New rounds will be created automatically by the backend cron job every 60 seconds.
+              ℹ️ Only the current round is available. New rounds will be created
+              automatically by the backend cron job every 60 seconds.
             </p>
           </div>
         </div>
@@ -678,7 +673,9 @@ export const PredictionRounds: React.FC = () => {
               key={round.epoch.toString()}
               round={round}
               status={status}
-              currentPrice={oraclePrice ? `$${(Number(oraclePrice) / 10000000).toFixed(4)}` : undefined}
+              currentPrice={
+                oraclePrice ? `$${oraclePrice.toFixed(4)}` : undefined
+              }
               onBetUp={
                 status === RoundStatus.LIVE
                   ? (amount: string) => handleBet("up", round.epoch, amount)
@@ -705,4 +702,3 @@ export const PredictionRounds: React.FC = () => {
     </div>
   );
 };
-
