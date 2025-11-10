@@ -416,7 +416,7 @@ impl PredictionMarket {
         let token_client = token::Client::new(e, &token_address);
 
         // Safely transfer tokens from user to contract
-        Self::safe_transfer_from_tokens(
+        Self::safe_transfer_tokens(
             e,
             &token_client,
             &user,
@@ -514,7 +514,7 @@ impl PredictionMarket {
         let token_client = token::Client::new(e, &token_address);
 
         // Safely transfer tokens from user to contract
-        Self::safe_transfer_from_tokens(
+        Self::safe_transfer_tokens(
             e,
             &token_client,
             &user,
