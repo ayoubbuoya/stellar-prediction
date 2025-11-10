@@ -5,6 +5,7 @@
   "private": true,
   "scripts": {
     "start:backend": "npm run build --workspace=packages && cd backend && npm start",
+    "start:frontend": "vite",
     "dev": "concurrently \"stellar scaffold watch --build-clients\" \"vite\"",
     "start": "concurrently \"stellar scaffold watch --build-clients\" \"vite\"",
     "build": "tsc -b && vite build",
@@ -34,6 +35,7 @@
     "react-dom": "^19.1.1",
     "react-router-dom": "^7.9.3",
     "tailwind-merge": "^3.3.1",
+    "viem": "^2.38.6",
     "zod": "^4.1.11"
   },
   "devDependencies": {
