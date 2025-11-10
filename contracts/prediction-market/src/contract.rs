@@ -318,6 +318,13 @@ impl PredictionMarket {
         e.storage().instance().set(&DataKey::IsGenesisLocked, &true);
     }
 
+    /// Function to execute a round
+    /// Only callable by the owner
+    /// # Events
+    /// - `ROUND_LOCKED`: Emitted when a round is locked
+    /// - `ROUND_ENDED`: Emitted when a round is ended
+    /// - `REWARDS_CALCULATED`: Emitted when rewards are calculated
+    /// - `ROUND_STARTED`: Emitted when a new round is started
     #[only_owner]
     pub fn execute_round(e: &Env) {
         let is_genesis_locked: bool = e
@@ -396,7 +403,7 @@ impl PredictionMarket {
         assert!(amount >= min_bet_amount, "BET_AMOUNT_TOO_LOW");
 
         // CHECK: User should not have already placed a bet in this round
-        assert!(Self::has_bet(e, epoch, &user), "ALREADY_BET_FOR_ROUND");
+        assert!(!Self::has_bet(e, epoch, &user), "ALREADY_BET_FOR_ROUND");
 
         // Get Token Address
         let token_address: Address = e
@@ -494,7 +501,7 @@ impl PredictionMarket {
         assert!(amount >= min_bet_amount, "BET_AMOUNT_TOO_LOW");
 
         // CHECK: User should not have already placed a bet in this round
-        assert!(Self::has_bet(e, epoch, &user), "ALREADY_BET_FOR_ROUND");
+        assert!(!Self::has_bet(e, epoch, &user), "ALREADY_BET_FOR_ROUND");
 
         // Get Token Address
         let token_address: Address = e
