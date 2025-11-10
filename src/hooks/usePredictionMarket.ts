@@ -1,13 +1,26 @@
 import { useState, useEffect, useCallback } from "react";
-import { Client as PredictionMarketClient, Round, BetInfo } from "prediction-market";
-import { Contract, TransactionBuilder, BASE_FEE, Networks } from "@stellar/stellar-sdk";
+import {
+  Client as PredictionMarketClient,
+  Round,
+  BetInfo,
+} from "prediction-market";
+import {
+  Contract,
+  TransactionBuilder,
+  BASE_FEE,
+  Networks,
+} from "@stellar/stellar-sdk";
 import { Server as SorobanServer } from "@stellar/stellar-sdk/rpc";
 import { useWallet } from "./useWallet";
 
-const CONTRACT_ID = import.meta.env.VITE_PREDICTION_MARKET_CONTRACT_ID || "CBFTXRJAL6SOBLBLWCXUIDCR7O6X4Q4AW2RHW7542BLBQUKLZRMYXEU5";
-const TOKEN_CONTRACT_ID = "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC";
-const RPC_URL = import.meta.env.VITE_RPC_URL || "https://soroban-testnet.stellar.org";
-const NETWORK_PASSPHRASE = import.meta.env.VITE_NETWORK_PASSPHRASE || "Test SDF Network ; September 2015";
+const CONTRACT_ID = import.meta.env.PUBLIC_PREDICTION_MARKET_CONTRACT_ID || "";
+const TOKEN_CONTRACT_ID =
+  "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC";
+const RPC_URL =
+  import.meta.env.PUBLIC_RPC_URL || "https://soroban-testnet.stellar.org";
+const NETWORK_PASSPHRASE =
+  import.meta.env.PUBLIC_NETWORK_PASSPHRASE ||
+  "Test SDF Network ; September 2015";
 
 // Polling interval in milliseconds (5 seconds)
 const POLLING_INTERVAL = 5000;
@@ -39,7 +52,7 @@ export const usePredictionMarket = () => {
   const [autoRefresh, setAutoRefresh] = useState(true);
 
   // Helper function to retry failed operations
-  const retryOperation = async <T,>(
+  const retryOperation = async <T>(
     operation: () => Promise<T>,
     retries = MAX_RETRIES,
     delay = RETRY_DELAY
@@ -59,6 +72,10 @@ export const usePredictionMarket = () => {
   useEffect(() => {
     const initClient = async () => {
       try {
+        console.log("Initializing prediction market client...");
+        console.log("Contract ID:", CONTRACT_ID);
+        console.log("RPC URL:", RPC_URL);
+        console.log("Network Passphrase:", NETWORK_PASSPHRASE);
         const predictionClient = new PredictionMarketClient({
           contractId: CONTRACT_ID,
           networkPassphrase: NETWORK_PASSPHRASE,
@@ -77,12 +94,14 @@ export const usePredictionMarket = () => {
 
   // Fetch current epoch
   const fetchCurrentEpoch = useCallback(async (): Promise<bigint | null> => {
+    console.log("fetchCurrentEpoch");
     if (!client) return null;
 
     try {
       setLoadingStates((prev) => ({ ...prev, epoch: true }));
       const result = await retryOperation(() => client.get_current_epoch());
-      const epoch = result.result as bigint;
+      const epoch = result.result;
+      console.log("currentEpoch:", epoch);
       setCurrentEpoch(epoch);
       setError(null);
       return epoch;
@@ -107,9 +126,11 @@ export const usePredictionMarket = () => {
       } catch (err: any) {
         // Check if it's a "round doesn't exist" error
         const errorMessage = err?.message || String(err);
-        if (errorMessage.includes("UnreachableCodeReached") ||
-            errorMessage.includes("InvalidAction") ||
-            errorMessage.includes("simulation failed")) {
+        if (
+          errorMessage.includes("UnreachableCodeReached") ||
+          errorMessage.includes("InvalidAction") ||
+          errorMessage.includes("simulation failed")
+        ) {
           // Round doesn't exist yet - this is expected for future rounds
           return null;
         }
@@ -145,7 +166,9 @@ export const usePredictionMarket = () => {
 
   // Fetch current epoch and next N rounds
   const fetchCurrentAndNextRounds = useCallback(
-    async (count: number = 3): Promise<{ currentEpoch: bigint | null; rounds: (Round | null)[] }> => {
+    async (
+      count: number = 3
+    ): Promise<{ currentEpoch: bigint | null; rounds: (Round | null)[] }> => {
       if (!client) {
         return { currentEpoch: null, rounds: [] };
       }
@@ -188,7 +211,9 @@ export const usePredictionMarket = () => {
 
       try {
         setLoadingStates((prev) => ({ ...prev, userdata: true }));
-        const result = await retryOperation(() => client.get_bet_info({ epoch, user }));
+        const result = await retryOperation(() =>
+          client.get_bet_info({ epoch, user })
+        );
         setError(null);
         return result.result as BetInfo;
       } catch (err) {
@@ -209,7 +234,9 @@ export const usePredictionMarket = () => {
 
       try {
         setLoadingStates((prev) => ({ ...prev, userdata: true }));
-        const result = await retryOperation(() => client.get_user_rounds({ user }));
+        const result = await retryOperation(() =>
+          client.get_user_rounds({ user })
+        );
         setError(null);
         return result.result as bigint[];
       } catch (err) {
@@ -232,7 +259,9 @@ export const usePredictionMarket = () => {
       }
 
       try {
-        console.log(`📝 Approving ${amount} tokens for contract ${CONTRACT_ID}...`);
+        console.log(
+          `📝 Approving ${amount} tokens for contract ${CONTRACT_ID}...`
+        );
 
         const server = new SorobanServer(RPC_URL);
         const sourceAccount = await server.getAccount(address);
@@ -250,11 +279,14 @@ export const usePredictionMarket = () => {
           .addOperation(
             contract.call(
               "approve",
-              ...[address, CONTRACT_ID, amount, expirationLedger].map((arg, i) => {
-                if (i === 0 || i === 1) return Contract.address(arg as string);
-                if (i === 2) return Contract.int128(arg as bigint);
-                return Contract.uint32(arg as number);
-              })
+              ...[address, CONTRACT_ID, amount, expirationLedger].map(
+                (arg, i) => {
+                  if (i === 0 || i === 1)
+                    return Contract.address(arg as string);
+                  if (i === 2) return Contract.int128(arg as bigint);
+                  return Contract.uint32(arg as number);
+                }
+              )
             )
           )
           .setTimeout(30)
@@ -283,13 +315,19 @@ export const usePredictionMarket = () => {
         }
 
         // Parse the signed transaction
-        const signedTx = TransactionBuilder.fromXDR(signedXdr.signedTxXdr, Networks.TESTNET);
+        const signedTx = TransactionBuilder.fromXDR(
+          signedXdr.signedTxXdr,
+          Networks.TESTNET
+        );
 
         // Send the transaction
         const txResponse = await server.sendTransaction(signedTx);
 
         console.log("✅ Token approval transaction sent!", txResponse.hash);
-        console.log("🔗 View on Stellar Expert:", `https://stellar.expert/explorer/testnet/tx/${txResponse.hash}`);
+        console.log(
+          "🔗 View on Stellar Expert:",
+          `https://stellar.expert/explorer/testnet/tx/${txResponse.hash}`
+        );
 
         // Wait for confirmation with better logging
         let status = await server.getTransaction(txResponse.hash);
@@ -517,4 +555,3 @@ export const usePredictionMarket = () => {
     isLoadingUserData: loadingStates.userdata,
   };
 };
-
