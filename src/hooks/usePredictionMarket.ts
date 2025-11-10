@@ -4,6 +4,8 @@ import {
   Round,
   BetInfo,
 } from "prediction-market";
+
+import { Client as TokenClient } from "xlm_asset";
 import {
   Contract,
   TransactionBuilder,
@@ -12,13 +14,14 @@ import {
 } from "@stellar/stellar-sdk";
 import { Server as SorobanServer } from "@stellar/stellar-sdk/rpc";
 import { useWallet } from "./useWallet";
+import { submitAndWaitForTransaction } from "../util/contract";
 
 const CONTRACT_ID = import.meta.env.PUBLIC_PREDICTION_MARKET_CONTRACT_ID || "";
 const TOKEN_CONTRACT_ID =
   "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC";
-const RPC_URL =
+export const RPC_URL =
   import.meta.env.PUBLIC_RPC_URL || "https://soroban-testnet.stellar.org";
-const NETWORK_PASSPHRASE =
+export const NETWORK_PASSPHRASE =
   import.meta.env.PUBLIC_NETWORK_PASSPHRASE ||
   "Test SDF Network ; September 2015";
 
@@ -40,6 +43,7 @@ interface LoadingStates {
 export const usePredictionMarket = () => {
   const { address, signTransaction } = useWallet();
   const [client, setClient] = useState<PredictionMarketClient | null>(null);
+  const [tokenClient, setTokenClient] = useState<TokenClient | null>(null);
   const [currentEpoch, setCurrentEpoch] = useState<bigint | null>(null);
   const [loadingStates, setLoadingStates] = useState<LoadingStates>({
     epoch: false,
@@ -50,6 +54,9 @@ export const usePredictionMarket = () => {
   });
   const [error, setError] = useState<string | null>(null);
   const [autoRefresh, setAutoRefresh] = useState(true);
+  const [stellarServer, setStellarServer] = useState<SorobanServer | null>(
+    null
+  );
 
   // Helper function to retry failed operations
   const retryOperation = async <T>(
@@ -81,7 +88,17 @@ export const usePredictionMarket = () => {
           networkPassphrase: NETWORK_PASSPHRASE,
           rpcUrl: RPC_URL,
         });
+
+        const tokenClient = new TokenClient({
+          contractId: TOKEN_CONTRACT_ID,
+          networkPassphrase: NETWORK_PASSPHRASE,
+          rpcUrl: RPC_URL,
+        });
+
+        console.log("Clients initialized");
+        setTokenClient(tokenClient);
         setClient(predictionClient);
+        setStellarServer(new SorobanServer(RPC_URL));
         setError(null);
       } catch (err) {
         console.error("Failed to initialize prediction market client:", err);
@@ -253,8 +270,13 @@ export const usePredictionMarket = () => {
   // Approve token allowance for the prediction market contract
   const approveToken = useCallback(
     async (amount: bigint) => {
-      if (!address || !signTransaction) {
-        console.error("Wallet not connected");
+      if (
+        !address ||
+        !tokenClient ||
+        !PredictionMarketClient ||
+        !signTransaction
+      ) {
+        console.error("Client not initialized or wallet not connected");
         return false;
       }
 
@@ -263,98 +285,47 @@ export const usePredictionMarket = () => {
           `📝 Approving ${amount} tokens for contract ${CONTRACT_ID}...`
         );
 
-        const server = new SorobanServer(RPC_URL);
-        const sourceAccount = await server.getAccount(address);
-        const latestLedger = await server.getLatestLedger();
-        const expirationLedger = latestLedger.sequence + 100000; // ~5.5 days
+        const latestLedger = await stellarServer?.getLatestLedger();
 
-        // Build the approve operation using Contract
-        const contract = new Contract(TOKEN_CONTRACT_ID);
-
-        // Build transaction with the contract call
-        let builtTx = new TransactionBuilder(sourceAccount, {
-          fee: BASE_FEE,
-          networkPassphrase: Networks.TESTNET,
-        })
-          .addOperation(
-            contract.call(
-              "approve",
-              ...[address, CONTRACT_ID, amount, expirationLedger].map(
-                (arg, i) => {
-                  if (i === 0 || i === 1)
-                    return Contract.address(arg as string);
-                  if (i === 2) return Contract.int128(arg as bigint);
-                  return Contract.uint32(arg as number);
-                }
-              )
-            )
-          )
-          .setTimeout(30)
-          .build();
-
-        // Simulate the transaction to get resource fees
-        console.log("🔄 Simulating transaction...");
-        const simulated = await server.simulateTransaction(builtTx);
-
-        if ("error" in simulated && simulated.error) {
-          throw new Error(`Simulation failed: ${simulated.error}`);
+        if (!latestLedger) {
+          console.error("Failed to fetch latest ledger");
+          return false;
         }
 
-        // Prepare the transaction with simulation results
-        builtTx = await server.prepareTransaction(builtTx);
+        const expirationLedger = latestLedger.sequence + 1_000_000;
 
-        // Sign the transaction with Freighter
-        console.log("✍️ Requesting signature from wallet...");
-        const signedXdr = await signTransaction(builtTx.toXDR(), {
-          address,
-          networkPassphrase: Networks.TESTNET,
+        console.log("latestLedger:", latestLedger.sequence);
+        console.log("expirationLedger:", expirationLedger);
+
+        // Create the approve transaction
+        const tx = await tokenClient.approve({
+          from: address,
+          spender: CONTRACT_ID,
+          amount: amount,
+          expiration_ledger: expirationLedger,
         });
 
-        if (!signedXdr.signedTxXdr) {
-          throw new Error("Transaction signing failed");
+        // Sign and send transaction
+        const result = await tx.signAndSend();
+        console.log("✅ Token approval Result :", result);
+
+        const txResponse = result.getTransactionResponse;
+
+        if (!txResponse) {
+          console.error("No transaction response received");
+          return false;
         }
 
-        // Parse the signed transaction
-        const signedTx = TransactionBuilder.fromXDR(
-          signedXdr.signedTxXdr,
-          Networks.TESTNET
-        );
-
-        // Send the transaction
-        const txResponse = await server.sendTransaction(signedTx);
-
-        console.log("✅ Token approval transaction sent!", txResponse.hash);
         console.log(
-          "🔗 View on Stellar Expert:",
-          `https://stellar.expert/explorer/testnet/tx/${txResponse.hash}`
+          "✅ Token approval Transaction Response :",
+          txResponse.status
         );
 
-        // Wait for confirmation with better logging
-        let status = await server.getTransaction(txResponse.hash);
-        let attempts = 0;
-        while (status.status === "NOT_FOUND" && attempts < 60) {
-          console.log(`⏳ Waiting for confirmation... (${attempts + 1}/60)`);
-          await new Promise((resolve) => setTimeout(resolve, 2000));
-          status = await server.getTransaction(txResponse.hash);
-          attempts++;
-        }
-
-        console.log("📊 Final transaction status:", status);
-
-        if (status.status === "SUCCESS") {
-          console.log("✅ Token approval confirmed!");
-          return true;
-        } else if (status.status === "FAILED") {
-          console.error("❌ Token approval transaction failed!");
-          console.error("Error details:", status);
-          return false;
-        } else {
-          console.error("⚠️ Token approval status unknown:", status.status);
-          console.error("Full status:", status);
-          return false;
-        }
+        console.log("✅ Token approval Transaction Hash:", txResponse.txHash);
+        setError(null);
+        return true;
       } catch (err) {
-        console.error("Failed to approve tokens:", err);
+        console.error("Failed to approve token:", err);
         return false;
       }
     },
@@ -369,28 +340,45 @@ export const usePredictionMarket = () => {
         return null;
       }
 
+      if (!stellarServer) {
+        setError("Stellar server not initialized");
+        return null;
+      }
+
+      if (!signTransaction) {
+        setError("signTransaction function not available");
+        return null;
+      }
+
       try {
         setLoadingStates((prev) => ({ ...prev, betting: true }));
 
-        // First, approve the token allowance
-        console.log("🔐 Step 1: Approving token allowance...");
-        const approved = await approveToken(amount);
-        if (!approved) {
-          throw new Error("Token approval failed");
-        }
+        // // First, approve the token allowance
+        // console.log("🔐 Step 1: Approving token allowance...");
+        // const approved = await approveToken(amount);
+        // if (!approved) {
+        //   throw new Error("Token approval failed");
+
+        // }
 
         // Then place the bet
         console.log("🎲 Step 2: Placing bet...");
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
         const tx = await client.bet_bull({
           epoch,
           user: address,
-          amount: amount as any, // Type assertion for i128
+          amount: amount,
         });
 
-        // Sign and send transaction
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const result = await (tx as any).signAndSend();
+        const result = await submitAndWaitForTransaction(
+          tx.toXDR(),
+          stellarServer,
+          address,
+          signTransaction
+        );
+
+        console.log("✅ Bet placed successfully:", result);
+
         setError(null);
 
         // Refresh current epoch and rounds after successful bet
@@ -398,7 +386,7 @@ export const usePredictionMarket = () => {
           fetchCurrentEpoch();
         }, 1000);
 
-        return result as unknown;
+        return result;
       } catch (err) {
         console.error("Failed to place bull bet:", err);
         setError("Failed to place bet");

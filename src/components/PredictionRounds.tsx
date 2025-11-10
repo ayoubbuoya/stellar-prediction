@@ -16,7 +16,7 @@ import {
 import { RoundStatus } from "../types/round";
 import { usePredictionMarket } from "../hooks/usePredictionMarket";
 import { useWallet } from "../hooks/useWallet";
-import { formatUnits } from "viem";
+import { formatUnits, parseUnits } from "viem";
 
 interface RoundCardProps {
   round: Round;
@@ -581,7 +581,7 @@ export const PredictionRounds: React.FC = () => {
       return;
     }
 
-    const amountInStroops = BigInt(Math.floor(parseFloat(amount) * 10000000)); // Convert XLM to stroops
+    const amountInStroops = parseUnits(amount, 7); // Convert XLM to stroops
 
     try {
       console.log(
