@@ -14,13 +14,15 @@ import {
   DialogTitle,
 } from "./ui/dialog";
 import { RoundStatus } from "../types/round";
+import { usePredictionMarket } from "../hooks/usePredictionMarket";
+import { useWallet } from "../hooks/useWallet";
 
 interface RoundCardProps {
   round: Round;
   status: RoundStatus;
   currentPrice?: string;
-  onBetUp?: () => void;
-  onBetDown?: () => void;
+  onBetUp?: (amount: string) => void;
+  onBetDown?: (amount: string) => void;
 }
 
 const RoundCard: React.FC<RoundCardProps> = ({
@@ -139,10 +141,14 @@ const RoundCard: React.FC<RoundCardProps> = ({
   };
 
   const handleConfirmBet = () => {
+    if (!betAmount || parseFloat(betAmount) <= 0) {
+      return;
+    }
+
     if (betDirection === "up") {
-      onBetUp?.();
+      onBetUp?.(betAmount);
     } else {
-      onBetDown?.();
+      onBetDown?.(betAmount);
     }
     setShowBetModal(false);
     setBetAmount("");
@@ -443,80 +449,259 @@ const RoundCard: React.FC<RoundCardProps> = ({
 };
 
 export const PredictionRounds: React.FC = () => {
-  const handleBetUp = () => {
-    console.log("Bet UP");
+  const { address } = useWallet();
+  const {
+    client,
+    fetchCurrentAndNextRounds,
+    currentEpoch,
+    betBull,
+    betBear,
+    getOraclePrice,
+    isLoadingRounds,
+    isLoadingBetting,
+    error,
+  } = usePredictionMarket();
+
+  const [rounds, setRounds] = useState<(Round | null)[]>([]);
+  const [oraclePrice, setOraclePrice] = useState<bigint | null>(null);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
+
+  // Calculate round status based on timestamps and current epoch
+  const calculateRoundStatus = (round: Round, currentEpochNum: bigint): RoundStatus => {
+    const now = Math.floor(Date.now() / 1000);
+    const epoch = Number(round.epoch);
+    const current = Number(currentEpochNum);
+
+    // Past rounds
+    if (epoch < current) {
+      return RoundStatus.EXPIRED;
+    }
+
+    // Current round
+    if (epoch === current) {
+      if (now < Number(round.lock_timestamp)) {
+        return RoundStatus.LIVE; // Can still bet
+      } else if (now < Number(round.close_timestamp)) {
+        return RoundStatus.CALCULATING; // Locked, waiting for close
+      } else {
+        return RoundStatus.EXPIRED; // Round ended
+      }
+    }
+
+    // Next round
+    if (epoch === current + 1) {
+      return RoundStatus.NEXT;
+    }
+
+    // Future rounds
+    return RoundStatus.LATER;
   };
 
-  const handleBetDown = () => {
-    console.log("Bet DOWN");
+  // Fetch rounds from backend API
+  const fetchRoundFromAPI = async (epoch: number) => {
+    try {
+      const response = await fetch(`http://localhost:3000/api/rounds/${epoch}`);
+      const data = await response.json();
+
+      if (data.success && data.data) {
+        const roundData = data.data;
+        return {
+          epoch: BigInt(roundData.epoch),
+          start_timestamp: BigInt(roundData.startTimestamp),
+          lock_timestamp: BigInt(roundData.lockTimestamp),
+          close_timestamp: BigInt(roundData.closeTimestamp),
+          lock_price: BigInt(roundData.lockPrice),
+          close_price: BigInt(roundData.closePrice),
+          total_amount: BigInt(roundData.totalAmount),
+          bull_amount: BigInt(roundData.bullAmount),
+          bear_amount: BigInt(roundData.bearAmount),
+          reward_amount: BigInt(roundData.rewardAmount),
+          reward_base_cal_amount: BigInt(roundData.rewardBaseCalAmount),
+        } as Round;
+      }
+      return null;
+    } catch (err) {
+      console.error(`Failed to fetch round ${epoch} from API:`, err);
+      return null;
+    }
   };
 
-  // Mock data for demonstration
-  const mockRounds: Round[] = [
-    {
-      epoch: BigInt(1),
-      start_timestamp: BigInt(Math.floor(Date.now() / 1000) - 300),
-      lock_timestamp: BigInt(Math.floor(Date.now() / 1000) - 60),
-      close_timestamp: BigInt(Math.floor(Date.now() / 1000)),
-      lock_price: BigInt(10987675),
-      close_price: BigInt(10987675),
-      total_amount: BigInt(10985524),
-      bull_amount: BigInt(5492762),
-      bear_amount: BigInt(5492762),
-      reward_base_cal_amount: BigInt(0),
-      reward_amount: BigInt(0),
-    },
-    {
-      epoch: BigInt(2),
-      start_timestamp: BigInt(Math.floor(Date.now() / 1000)),
-      lock_timestamp: BigInt(Math.floor(Date.now() / 1000) + 240),
-      close_timestamp: BigInt(Math.floor(Date.now() / 1000) + 300),
-      lock_price: BigInt(0),
-      close_price: BigInt(0),
-      total_amount: BigInt(29825524),
-      bull_amount: BigInt(14912762),
-      bear_amount: BigInt(14912762),
-      reward_base_cal_amount: BigInt(0),
-      reward_amount: BigInt(0),
-    },
-    {
-      epoch: BigInt(3),
-      start_timestamp: BigInt(Math.floor(Date.now() / 1000) + 300),
-      lock_timestamp: BigInt(Math.floor(Date.now() / 1000) + 540),
-      close_timestamp: BigInt(Math.floor(Date.now() / 1000) + 600),
-      lock_price: BigInt(0),
-      close_price: BigInt(0),
-      total_amount: BigInt(0),
-      bull_amount: BigInt(0),
-      bear_amount: BigInt(0),
-      reward_base_cal_amount: BigInt(0),
-      reward_amount: BigInt(0),
-    },
-  ];
+  // Fetch rounds and oracle price
+  const loadData = async () => {
+    try {
+      // Fetch current epoch from backend API
+      const currentResponse = await fetch('http://localhost:3000/api/rounds/current');
+      const currentData = await currentResponse.json();
+
+      if (!currentData.success || !currentData.data) {
+        console.error("Failed to fetch current epoch");
+        return;
+      }
+
+      const currentEpoch = parseInt(currentData.data.currentEpoch);
+
+      // Fetch previous 2 rounds, current round, and next 2 rounds from backend API
+      const roundPromises = [
+        fetchRoundFromAPI(currentEpoch - 2),
+        fetchRoundFromAPI(currentEpoch - 1),
+        fetchRoundFromAPI(currentEpoch),
+        fetchRoundFromAPI(currentEpoch + 1),
+        fetchRoundFromAPI(currentEpoch + 2),
+      ];
+
+      const fetchedRounds = await Promise.all(roundPromises);
+
+      // Filter out null rounds (rounds that don't exist yet)
+      const validRounds = fetchedRounds.filter((r): r is Round => r !== null);
+
+      if (validRounds.length > 0) {
+        setRounds(validRounds);
+      } else {
+        setRounds([]);
+      }
+
+      // Fetch oracle price from smart contract
+      const price = await getOraclePrice();
+      if (price) {
+        setOraclePrice(price);
+      }
+    } catch (err) {
+      console.error("Failed to load prediction rounds:", err);
+    } finally {
+      setIsInitialLoading(false);
+    }
+  };
+
+  // Initial load
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  // Auto-refresh every 10 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      loadData();
+    }, 10000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  // Handle betting
+  const handleBet = async (direction: "up" | "down", epoch: bigint, amount: string) => {
+    if (!address) {
+      console.error("❌ Please connect your wallet first");
+      return;
+    }
+
+    const amountInStroops = BigInt(Math.floor(parseFloat(amount) * 10000000)); // Convert XLM to stroops
+
+    try {
+      console.log(`🎯 Placing ${direction} bet on epoch ${epoch} with amount ${amount} XLM (${amountInStroops} stroops)`);
+
+      if (direction === "up") {
+        await betBull(epoch, amountInStroops);
+        console.log("✅ Bull bet placed successfully!");
+      } else {
+        await betBear(epoch, amountInStroops);
+        console.log("✅ Bear bet placed successfully!");
+      }
+
+      // Refresh data after betting
+      setTimeout(() => {
+        loadData();
+      }, 2000);
+    } catch (err) {
+      console.error("❌ Failed to place bet:", err);
+    }
+  };
+
+  // Loading state
+  if (isInitialLoading) {
+    return (
+      <div className="w-full flex items-center justify-center py-20">
+        <div className="text-center">
+          <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-primary border-r-transparent mb-4"></div>
+          <p className="text-lg font-heading">Loading prediction rounds...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Error state
+  if (error && rounds.length === 0) {
+    return (
+      <div className="w-full flex items-center justify-center py-20">
+        <div className="text-center">
+          <p className="text-lg font-heading text-destructive mb-2">Failed to load rounds</p>
+          <p className="text-sm text-muted-foreground">{error}</p>
+          <Button onClick={loadData} className="mt-4">
+            Retry
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // No rounds available
+  if (rounds.length === 0) {
+    return (
+      <div className="w-full flex items-center justify-center py-20">
+        <div className="text-center">
+          <p className="text-lg font-heading">No active rounds available</p>
+          <p className="text-sm text-muted-foreground mt-2">Please check back later</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full">
+      {/* Info message if only 1 round available */}
+      {rounds.length === 1 && (
+        <div className="max-w-2xl mx-auto mb-6 px-4">
+          <div className="bg-accent/20 border-2 border-border rounded-base p-4 shadow-shadow">
+            <p className="text-sm font-heading text-center">
+              ℹ️ Only the current round is available. New rounds will be created automatically by the backend cron job every 60 seconds.
+            </p>
+          </div>
+        </div>
+      )}
+
       <div className="flex gap-4 overflow-x-auto pb-4 justify-center px-4">
-        <RoundCard
-          round={mockRounds[0]}
-          status={RoundStatus.EXPIRED}
-        />
-        <RoundCard
-          round={mockRounds[1]}
-          status={RoundStatus.LIVE}
-          currentPrice="$0.1256"
-          onBetUp={handleBetUp}
-          onBetDown={handleBetDown}
-        />
-        <RoundCard
-          round={mockRounds[2]}
-          status={RoundStatus.NEXT}
-        />
-        <RoundCard
-          round={mockRounds[2]}
-          status={RoundStatus.LATER}
-        />
+        {rounds.map((round, index) => {
+          if (!round || !currentEpoch) return null;
+
+          const status = calculateRoundStatus(round, currentEpoch);
+
+          return (
+            <RoundCard
+              key={round.epoch.toString()}
+              round={round}
+              status={status}
+              currentPrice={oraclePrice ? `$${(Number(oraclePrice) / 10000000).toFixed(4)}` : undefined}
+              onBetUp={
+                status === RoundStatus.LIVE
+                  ? (amount: string) => handleBet("up", round.epoch, amount)
+                  : undefined
+              }
+              onBetDown={
+                status === RoundStatus.LIVE
+                  ? (amount: string) => handleBet("down", round.epoch, amount)
+                  : undefined
+              }
+            />
+          );
+        })}
       </div>
+
+      {isLoadingBetting && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-background p-6 rounded-base border-2 border-border shadow-shadow">
+            <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-primary border-r-transparent mb-4"></div>
+            <p className="text-lg font-heading">Placing bet...</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
