@@ -25,3 +25,10 @@ stellar contract bindings typescript \
   --contract-id CCRURKLYVROZ2OEDZJINGILO55AZBA642FRVCH23PEQGMQKYVBTE7G32 \
   --output-dir packages/prediction-market
 ```
+
+```bash
+stellar contract bindings typescript \
+ --network testnet \
+ --contract-id CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC \
+ --output-dir packages/xlm_asset
+```
